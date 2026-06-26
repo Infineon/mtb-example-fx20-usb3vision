@@ -1,12 +1,17 @@
-# USB3 Vision Application 1.0.0
+# USB3 Vision Application 1.0.1
 
 ## What's Included?
 
 Refer to the [README.md](./README.md).
 
+## Feature Updates
+
+* Updated application to make use of USBFXStack version 1.3.2
+* Added support for firmware-based LVDS PHY training
+
 ## Defect Fixes
 
-* Initial release
+* None
 
 ## Supported Software and Tools
 
@@ -15,10 +20,10 @@ This version of the application was validated for the compatibility with the fol
 | Software and Tools                                       | Version |
 | :---                                                     | :----:  |
 | ModusToolbox&trade; software environment                 | 3.5.0   |
-| CAT1A Peripheral Driver Library                          | 3.16.0  |
-| USBFXStack Middleware Library                            | 1.3.0   |
+| CAT1A Peripheral Driver Library                          | 3.19.0  |
+| USBFXStack Middleware Library                            | 1.3.2   |
 | FreeRTOS&trade; for Infineon MCUs                        | 10.5.004|
-| GNU Arm&reg; Embedded Compiler                           | 11.3.1  |
+| GNU Arm&reg; Embedded Compiler                           | 14.2.1  |
 | Arm&reg; Compiler                                        | 6.22    |
 
 ## More information
@@ -30,4 +35,4 @@ For more information, refer to the following documents:
 * [Infineon Technologies AG](https://www.infineon.com)
 
 ---
-© 2025, Cypress Semiconductor Corporation (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.
+© 2026, Cypress Semiconductor Corporation (an Infineon company) or an affiliate of Cypress Semiconductor Corporation.

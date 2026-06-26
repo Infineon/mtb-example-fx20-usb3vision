@@ -6,7 +6,7 @@
 *
 *******************************************************************************
 * \copyright
-* (c) (2021-2024), Cypress Semiconductor Corporation (an Infineon company) or
+* (c) (2026), Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.
 *
 * SPDX-License-Identifier: Apache-2.0
@@ -290,7 +290,6 @@ void Cy_U3V_MemCommitBuffer (cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_hbdma_chann
     cy_en_hbdma_mgr_status_t   dmaStat;
     cy_stc_hbdma_buff_status_t bufStat;
 
-
     if(pChannel==NULL || pAppCtxt == NULL)
     {
         DBG_APP_ERR("Buffer status or channel or app context is NULL\r\n");
@@ -332,7 +331,7 @@ void Cy_U3V_MemCommitBuffer (cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_hbdma_chann
             {
                 bufStat.count = U3V_INMEM_BUFFER_SIZE;
             }
-        
+
             pAppCtxt->frameSizeTransferred += bufStat.count;
         }
         else
@@ -343,19 +342,11 @@ void Cy_U3V_MemCommitBuffer (cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_hbdma_chann
         }
     }
 
-    if(pAppCtxt->devSpeed > CY_USBD_USB_DEV_HS)
-    {
-        dmaStat = Cy_HBDma_Channel_CommitBuffer(pChannel,&bufStat);
-        if (dmaStat != CY_HBDMA_MGR_SUCCESS) {
-            DBG_APP_ERR("CommitBuf fail %x\r\n",dmaStat);
-            return;
-        }
+    dmaStat = Cy_HBDma_Channel_CommitBuffer(pChannel,&bufStat);
+    if (dmaStat != CY_HBDMA_MGR_SUCCESS) {
+        DBG_APP_ERR("CommitBuf fail %x\r\n",dmaStat);
+        return;
     }
-    else
-    {
-        Cy_USB_AppQueueWrite(pAppCtxt, CY_U3V_EP_DSI_STREAM, bufStat.pBuffer, bufStat.count);
-    }
-    
 }
 
 /*****************************************************************************
@@ -383,17 +374,9 @@ void Cy_U3V_MemCommitFrameBuffers (cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_hbdma
 
     glU3VBufCounter = CY_USB_U3V_LEADER_BUFFER_NO;
     
-    if(pAppCtxt->devSpeed > CY_USBD_USB_DEV_HS)
-    {
-        for (i = CY_USB_U3V_LEADER_BUFFER_NO; i <= U3V_INMEM_BUFFER_COUNT; i++) {
-            /* Commit the data buffer to USB */
-            Cy_U3V_MemCommitBuffer (pAppCtxt, pChannel, i);
-        }
-    }
-    else 
-    {
-        Cy_U3V_MemCommitBuffer (pAppCtxt, pChannel, CY_USB_U3V_LEADER_BUFFER_NO);
-        i = 2;
+    for (i = CY_USB_U3V_LEADER_BUFFER_NO; i <= U3V_INMEM_BUFFER_COUNT; i++) {
+        /* Commit the data buffer to USB */
+        Cy_U3V_MemCommitBuffer (pAppCtxt, pChannel, i);
     }
     
     glU3VBufCounter = i;

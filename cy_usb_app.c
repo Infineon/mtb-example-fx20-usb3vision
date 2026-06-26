@@ -6,7 +6,7 @@
 *
 *******************************************************************************
 * \copyright
-* (c) (2021-2024), Cypress Semiconductor Corporation (an Infineon company) or
+* (c) (2026), Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.
 *
 * SPDX-License-Identifier: Apache-2.0
@@ -48,6 +48,7 @@
 
 extern uint8_t CyFxUSB20DeviceDscr[];
 extern cy_stc_usb_app_ctxt_t appCtxt;
+extern cy_stc_lvds_context_t lvdsContext;
 
 #if FPGA_ENABLE
 extern cy_stc_hbdma_buf_mgr_t HBW_BufMgr;
@@ -243,6 +244,8 @@ void Cy_LVDS_CommitColorbarData(void)
 {
     uint32_t loop = 0, lineCount = 0;
     cy_stc_hbdma_buff_status_t buffStat;
+    cy_en_hbdma_mgr_status_t dmaStat;
+
     cy_stc_lvds_loopback_config_t lbPgmConfig =
     {
         .lbPgmCount = 0,
@@ -258,8 +261,9 @@ void Cy_LVDS_CommitColorbarData(void)
         .ctrlBusVal = 0x00000000
     };
 
-    if (Cy_HBDma_Channel_GetBuffer(&lvdsLbPgmChannel, &buffStat) != CY_HBDMA_MGR_SUCCESS) {
-        DBG_APP_ERR("GetLpbkBuf 1 failed\r\n");
+    dmaStat = Cy_HBDma_Channel_GetBuffer(&lvdsLbPgmChannel, &buffStat);
+    if (dmaStat != CY_HBDMA_MGR_SUCCESS) {
+        DBG_APP_ERR("GetLpbkBuf 1 failed with code %x\r\n", dmaStat);
         return;
     }
 
@@ -393,11 +397,10 @@ static void Cy_U3V_AppFlushAndResetDma(
     Cy_USBSS_Cal_ClkStopOnEpRstEnable(pAppCtxt->pUsbdCtxt->pSsCalCtxt, true);
     Cy_USB_USBD_EndpSetClearNakNrdy(pAppCtxt->pUsbdCtxt, endpoint, dir, true);
     Cy_SysLib_DelayUs(100);
+
     /* Reset the DMA channel: HBW or DataWire. */
     Cy_HBDma_Channel_Reset(dmaChannel);
-    if (Cy_USBD_GetDeviceSpeed(pAppCtxt->pUsbdCtxt) < CY_USBD_USB_DEV_SS_GEN1) {
-        Cy_USBHS_App_ResetEpDma(&(pAppCtxt->endpInDma[endpoint]));
-    }
+
     Cy_USBD_FlushEndp(pAppCtxt->pUsbdCtxt, endpoint, dir);
     Cy_USBD_ResetEndp(pAppCtxt->pUsbdCtxt, endpoint, dir, flag);
     Cy_USB_USBD_EndpSetClearNakNrdy(pAppCtxt->pUsbdCtxt, endpoint, dir, false);
@@ -496,20 +499,7 @@ Cy_U3V_AppSendResponse (
         return;
     }
 
-    if (pAppCtxt->devSpeed >= CY_USBD_USB_DEV_SS_GEN1){
-        hbdma_stat = Cy_HBDma_Channel_SendData(glChHandleDCIRsp, 0, rspBuffer, length);
-    } else{
-        /* Wait until ongoing DSI buffer transfer is finished. */
-        if (glU3VIsApplnActive) {
-            Cy_SysLib_Delay(10);
-        }
-        Cy_USB_AppQueueWrite(pAppCtxt, CY_U3V_EP_DCI_RSP, rspBuffer, length);
-        Cy_SysLib_Delay(1);
-
-        /* We can re-enable streaming endpoint interrupt once DCI command has been handled. */
-        NVIC_EnableIRQ(cpuss_interrupts_dw1_0_IRQn + CY_U3V_EP_DSI_STREAM);
-    }
-
+    hbdma_stat = Cy_HBDma_Channel_SendData(glChHandleDCIRsp, 0, rspBuffer, length);
     if (hbdma_stat != CY_HBDMA_MGR_SUCCESS) {
         DBG_APP_ERR("DCIRsp SendData HBDMA Err:%x\r\n",hbdma_stat);
         Cy_U3V_AppFlushAndResetDma(pAppCtxt,glChHandleDCIRsp, CY_U3V_EP_DCI_RSP, CY_USB_ENDP_DIR_IN, true);
@@ -729,6 +719,12 @@ void Cy_U3V_AppGpifIntr(void *pApp)
 
     glFlags.blockFrame = false;
     Cy_U3V_AppFlushAndResetDma(pAppCtxt, glChHandleDSI, CY_U3V_EP_DSI_STREAM, CY_USB_ENDP_DIR_IN, true);
+
+    if (pAppCtxt->isLvdsWltoUsbHs) {
+        DBG_APP_TRACE("CLR FWRDY\r\n");
+        pAppCtxt->fwDmaReadyStatus = false;
+        Cy_LVDS_PhyGpioClr(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+    }
 
     if (glU3VIsApplnActive)
     {
@@ -1149,6 +1145,12 @@ Cy_U3V_AppDSIHaltEventHandler (
         Cy_U3V_AppFlushAndResetDma(pAppCtxt, glChHandleDSI, CY_U3V_EP_DSI_STREAM, CY_USB_ENDP_DIR_IN, false);
         Cy_USB_USBD_EndpSetClearStall(pAppCtxt->pUsbdCtxt, CY_U3V_EP_DSI_STREAM, CY_USB_ENDP_DIR_IN, false);
 
+        if (pAppCtxt->isLvdsWltoUsbHs) {
+            DBG_APP_TRACE("CLR FWRDY\r\n");
+            pAppCtxt->fwDmaReadyStatus = false;
+            Cy_LVDS_PhyGpioClr(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+        }
+
 #if LVDS_LB_EN
         pAppCtxt->u3vFlowCtrlFlag = false;
 
@@ -1388,6 +1390,12 @@ Cy_U3V_AppDSIStop (
 #if FPGA_ENABLE
         status = Cy_I2C_Write(FPGASLAVE_ADDR, FPGA_DEV0_STREAM_ENABLE_ADDRESS, CAMERA_APP_DISABLE,FPGA_I2C_ADDRESS_WIDTH, FPGA_I2C_DATA_WIDTH);
         ASSERT_NON_BLOCK(status == CY_SCB_I2C_SUCCESS, status);
+
+        if (pAppCtxt->isLvdsWltoUsbHs) {
+            DBG_APP_TRACE("CLR FWRDY\r\n");
+            pAppCtxt->fwDmaReadyStatus = false;
+            Cy_LVDS_PhyGpioClr(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+        }
 #endif /* FPGA_ENABLE */
 
         /* Update the flag so that the application thread is notified of this. */
@@ -1483,11 +1491,9 @@ Cy_U3V_AppDSIStart (
 
         /* Fill the buffers with the data to be sent. */
         Cy_U3V_MemFillBuffers();
-
-#endif /*U3V_INMEM_EN*/
+#endif /* U3V_INMEM_EN */
 
         /* Enable the DMA channel for data transfer. */
-        pAppCtxt->u3vPendingBufCnt = 0;
         mgrStatus = Cy_HBDma_Channel_Enable(glChHandleDSI, 0);
         if (mgrStatus != CY_HBDMA_MGR_SUCCESS)
         {
@@ -1497,7 +1503,6 @@ Cy_U3V_AppDSIStart (
 
 #if U3V_INMEM_EN
         Cy_U3V_MemCommitFrameBuffers(pAppCtxt, glChHandleDSI);
-
         Cy_USB_USBD_EndpSetClearNakNrdy(pUsbdCtxt, CY_U3V_EP_DSI_STREAM, CY_USB_ENDP_DIR_IN, false);
 #endif /* U3V_INMEM_EN */
 
@@ -1508,10 +1513,10 @@ Cy_U3V_AppDSIStart (
         glFlags.blockFrame = false;
         Cy_LVDS_GpifClearFwTrig(LVDSSS_LVDS, 0);
 #endif /* INMD_EN */
+
 #if LVDS_LB_EN
         if (lvdsConsCount == 0)
         {
-
             Cy_Update_LvdsLinkClock(pAppCtxt->devSpeed == CY_USBD_USB_DEV_HS);
             DBG_APP_INFO("Start loopback\r\n");
             pAppCtxt->u3vFlowCtrlFlag = false;
@@ -1533,6 +1538,12 @@ Cy_U3V_AppDSIStart (
         Cy_U3V_AppFPGAParamsUpdate(glFrameParams.width,glFrameParams.height,glFrameParams.fps);
         status = Cy_I2C_Write(FPGASLAVE_ADDR, FPGA_DEV0_STREAM_ENABLE_ADDRESS, CAMERA_APP_ENABLE,FPGA_I2C_ADDRESS_WIDTH, FPGA_I2C_DATA_WIDTH);
         ASSERT_NON_BLOCK(status == CY_SCB_I2C_SUCCESS, status);
+
+        if (pAppCtxt->isLvdsWltoUsbHs) {
+            DBG_APP_TRACE("SET FWRDY\r\n");
+            pAppCtxt->fwDmaReadyStatus = true;
+            Cy_LVDS_PhyGpioSet(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+        }
 #endif
     } else{
         DBG_APP_INFO("DSI App already started..\r\n");
@@ -1658,6 +1669,7 @@ Cy_U3V_AppCommitColorbarData (
         cy_stc_hbdma_channel_t *pChHandle)
 {
     cy_stc_hbdma_buff_status_t lbBuffStat;
+    cy_en_hbdma_mgr_status_t dmaStat;
 
     if (lvdsLpbkBlocked) {
         DBG_APP_INFO("Skip data commit due to streaming stop\r\n");
@@ -1665,16 +1677,18 @@ Cy_U3V_AppCommitColorbarData (
     }
 
     /* Two buffers of the producer socket are required to fill one buffer of the streaming socket. */
-    if (Cy_HBDma_Channel_GetBuffer(pChHandle, &lbBuffStat) != CY_HBDMA_MGR_SUCCESS) {
-        DBG_APP_ERR("GetLpbkBuf 2 failed\r\n");
+    dmaStat = Cy_HBDma_Channel_GetBuffer(pChHandle, &lbBuffStat);
+    if (dmaStat != CY_HBDMA_MGR_SUCCESS) {
+        DBG_APP_ERR("GetLpbkBuf 2 failed with code %x\r\n", dmaStat);
         return;
     }
 
     lbBuffStat.count = LOOPBACK_MEM_BUF_SIZE;
     Cy_HBDma_Channel_CommitBuffer(pChHandle, &lbBuffStat);
 
-    if (Cy_HBDma_Channel_GetBuffer(pChHandle, &lbBuffStat) != CY_HBDMA_MGR_SUCCESS) {
-        DBG_APP_ERR("GetLpbkBuf 3 failed\r\n");
+    dmaStat = Cy_HBDma_Channel_GetBuffer(pChHandle, &lbBuffStat);
+    if (dmaStat != CY_HBDMA_MGR_SUCCESS) {
+        DBG_APP_ERR("GetLpbkBuf 3 failed with code %x\r\n", dmaStat);
         return;
     }
 
@@ -1840,11 +1854,6 @@ Cy_U3V_AppHandleProduceEvent (
 #else
     if (glFlags.blockFrame){
         /* App stop already received from HOST APP. Ignore leader of next frame from LVDS. */
-        if (pAppCtxt->devSpeed < CY_USBD_USB_DEV_SS_GEN1){
-            if (pAppCtxt->u3vPendingBufCnt){
-                pAppCtxt->u3vPendingBufCnt--;
-            }
-        }
         xMsg.type = CY_USB_U3V_DMA_BLOCKED_FLAG;
         Cy_USB_AppSendMsgToTask(pAppCtxt, &xMsg);
         Cy_HBDma_Channel_DiscardBuffer(pChHandle, &buffStat);
@@ -1920,6 +1929,11 @@ Cy_U3V_AppHandleProduceEvent (
             xMsg.type = CY_USB_U3V_ZLP_DISCARDED;
             Cy_USB_AppSendMsgToTask(pAppCtxt, &xMsg);
             Cy_HBDma_Channel_DiscardBuffer(pChHandle, &buffStat);
+            if (pAppCtxt->isLvdsWltoUsbHs) {
+                DBG_APP_TRACE("SET FWRDY\r\n");
+                pAppCtxt->fwDmaReadyStatus = true;
+                Cy_LVDS_PhyGpioSet(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+            }
             return;
         }
     }
@@ -1952,142 +1966,12 @@ Cy_U3V_AppHandleProduceEvent (
 #endif /* LVDS_LB_EN */
 
     /* Send the data to the USB endpoint. */
-    if (pAppCtxt->devSpeed >= CY_USBD_USB_DEV_SS_GEN1)
+    status = Cy_HBDma_Channel_CommitBuffer(pChHandle, &buffStat);
+    if (status != CY_HBDMA_MGR_SUCCESS)
     {
-        status = Cy_HBDma_Channel_CommitBuffer(pChHandle, &buffStat);
-        if (status != CY_HBDMA_MGR_SUCCESS)
-        {
-            DBG_APP_ERR("HB-DMA DSI CommitBuffer Error: %x\r\n", status);
-            return;
-        }
-    }
-    else
-    {
-        /* For USB 2.0, we need to write the data to the USB endpoint*/
-        Cy_USB_AppQueueWrite(pAppCtxt, CY_U3V_EP_DSI_STREAM, buffStat.pBuffer, buffStat.count);
-    }
-}
-
-/*****************************************************************************
-* Function Name: Cy_U3V_AppCommandRecvCompletion
-******************************************************************************
-* Summary:
-* Function that handles DMA transfer completion on the USB-HS BULK-OUT
-* endpoint used to receive U3V control commands.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \return
-* None
-*
- *******************************************************************************/
-void
-Cy_U3V_AppCommandRecvCompletion (
-        cy_stc_usb_app_ctxt_t *pAppCtxt)
-{
-    cy_stc_usbd_app_msg_t xMsg;
-
-    xMsg.type = CY_USB_U3V_CMD_EVT_FLAG;
-    Cy_USB_AppSendMsgToTask(pAppCtxt, &xMsg);
-
-    /* Mask out ISR for the streaming endpoint until command has been handled. */
-    NVIC_DisableIRQ(cpuss_interrupts_dw1_0_IRQn + CY_U3V_EP_DSI_STREAM);
-}
-
-/*****************************************************************************
-* Function Name: Cy_U3V_AppResponseSendCompletion
-******************************************************************************
-* Summary:
-* Function that handles DMA transfer completion on the USB-HS BULK-IN
-* endpoint. This is equivalent to the receipt of a cosnume event in the USB-SS use
-* case.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \return
-* None
-*
- *******************************************************************************/
-void
-Cy_U3V_AppResponseSendCompletion (
-        cy_stc_usb_app_ctxt_t *pAppCtxt)
-{
-    cy_stc_usbd_app_msg_t xMsg;
-
-    xMsg.type = CY_USB_U3V_RESP_SENT_EVT_FLAG;
-    Cy_USB_AppSendMsgToTask(pAppCtxt, &xMsg);
-}
-
-/*****************************************************************************
-* Function Name: Cy_U3V_AppHandleSendCompletion
-******************************************************************************
-* Summary:
-* Function that handles DMA transfer completion on the USB-HS BULK-IN
-* endpoint. This is equivalent to the receipt of a consume event in the USB-SS use
-* case and we can discard the active data buffer on the LVDS side.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \return
-* None
-*
- *******************************************************************************/
-
-void
-Cy_U3V_AppHandleSendCompletion (
-        cy_stc_usb_app_ctxt_t *pAppCtxt)
-{
-#if !U3V_INMEM_EN
-    cy_stc_hbdma_buff_status_t buffStat;
-    cy_en_hbdma_mgr_status_t   dmaStat;
-
-    /* At least one buffer must be pending. */
-    if (pAppCtxt->u3vPendingBufCnt == 0)
-    {
-        DBG_APP_ERR("PendingBufCnt=0 on SendComplete\r\n");
+        DBG_APP_ERR("HB-DMA DSI CommitBuffer Error: %x\r\n", status);
         return;
     }
-
-    /* The buffer which has been sent to the USB host can be discarded. */
-    dmaStat = Cy_HBDma_Channel_DiscardBuffer(glChHandleDSI, &buffStat);
-    if (dmaStat != CY_HBDMA_MGR_SUCCESS)
-    {
-        DBG_APP_ERR("DiscardBuffer failed with status=%x\r\n", dmaStat);
-        return;
-    }
-
-#if LVDS_LB_EN
-    /* If colorbar data pattern was blocked, enable it to fill one more data buffer. */
-    if (pAppCtxt->u3vFlowCtrlFlag)
-    {
-        pAppCtxt->u3vFlowCtrlFlag = false;
-        Cy_U3V_AppCommitColorbarData(pAppCtxt, &lvdsLbPgmChannel);
-    }
-#endif /* LVDS_LB_EN */
-
-    /* If another DMA buffer has already been filled by the producer, go
-     * on and send it to the host controller.
-     */
-    pAppCtxt->u3vPendingBufCnt--;
-    if (pAppCtxt->u3vPendingBufCnt > 0)
-    {
-        Cy_U3V_AppHandleProduceEvent(pAppCtxt, glChHandleDSI);
-    }
-#else
-    /* For in-memory streaming, we need to commit the next buffer to the USB endpoint. */
-    Cy_U3V_MemCommitBuffer(pAppCtxt, glChHandleDSI, glU3VBufCounter);
-    if(glU3VBufCounter == glU3VFrameBuffer)
-    {
-        glU3VBufCounter = CY_USB_U3V_LEADER_BUFFER_NO;
-    }
-    else
-    {
-        glU3VBufCounter++;
-    }
-#endif /* !U3V_INMEM_EN */
 }
 
 /*****************************************************************************
@@ -2123,14 +2007,7 @@ Cy_U3V_AppStreamDmaCallback (
     cy_stc_usb_app_ctxt_t *pAppCtxt = (cy_stc_usb_app_ctxt_t *)userCtx;
 
     if (type == CY_HBDMA_CB_PROD_EVENT) {
-        if (pAppCtxt->devSpeed >= CY_USBD_USB_DEV_SS_GEN1) {
-            Cy_U3V_AppHandleProduceEvent(pAppCtxt, handle);
-        } else {
-            pAppCtxt->u3vPendingBufCnt++;
-            if ((pAppCtxt->u3vPendingBufCnt == 1) || (glFlags.blockFrame)) {
-                Cy_U3V_AppHandleProduceEvent(pAppCtxt, handle);
-            }
-        }
+        Cy_U3V_AppHandleProduceEvent(pAppCtxt, handle);
     } else {
         if (type == CY_HBDMA_CB_CONS_EVENT) {
             if (glFlags.lastFrameProduced)
@@ -2149,6 +2026,12 @@ Cy_U3V_AppStreamDmaCallback (
                 Cy_U3V_AppCommitColorbarData(pAppCtxt, &lvdsLbPgmChannel);
             }
 #endif /* LVDS_LB_EN */
+
+            if (pAppCtxt->isLvdsWltoUsbHs) {
+                DBG_APP_TRACE("SET FWRDY\r\n");
+                pAppCtxt->fwDmaReadyStatus = true;
+                Cy_LVDS_PhyGpioSet(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+            }
         }
     }
 
@@ -2222,23 +2105,6 @@ void Cy_HbDma_LoopbackCb (cy_stc_hbdma_channel_t *handle,
 void
 Cy_USB_AppDisableEndpDma (cy_stc_usb_app_ctxt_t *pAppCtxt)
 {
-    uint8_t i;
-
-    /* On USB 2.x connections, make sure the DataWire channels are disabled and reset. */
-    if (pAppCtxt->devSpeed <= CY_USBD_USB_DEV_HS) {
-        for (i = 1; i < CY_USB_MAX_ENDP_NUMBER; i++) {
-            if (pAppCtxt->endpInDma[i].valid) {
-                /* DeInit the DMA channel and disconnect the triggers. */
-                Cy_USBHS_App_DisableEpDmaSet(&(pAppCtxt->endpInDma[i]));
-            }
-
-            if (pAppCtxt->endpOutDma[i].valid) {
-                /* DeInit the DMA channel and disconnect the triggers. */
-                Cy_USBHS_App_DisableEpDmaSet(&(pAppCtxt->endpOutDma[i]));
-            }
-        }
-    }
-
     /* Disable and destroy the High BandWidth DMA channels. */
     if (glChHandleDSI != NULL) {
 #if U3V_INMEM_EN
@@ -2506,27 +2372,18 @@ Cy_U3V_AppDeviceTaskHandler (void *pTaskParam)
             /* U3V Command Received by device */
             case CY_USB_U3V_CMD_EVT_FLAG:
                 /* Move to Process Command state - U3V Spec: Device Control Interface State Diagram */
-
-                if (pAppCtxt->devSpeed >= CY_USBD_USB_DEV_SS_GEN1)
+                mgrStatus = Cy_HBDma_Channel_GetBuffer(glChHandleDCICmd,&buffStat);
+                if (mgrStatus != CY_HBDMA_MGR_SUCCESS)
                 {
-                    mgrStatus = Cy_HBDma_Channel_GetBuffer(glChHandleDCICmd,&buffStat);
-                    if (mgrStatus != CY_HBDMA_MGR_SUCCESS)
-                    {
-                        DBG_APP_ERR("DCIcmd GetBuffer Error:%x\r\n",mgrStatus);
-                        break;
-                    }
-
-                    memcpy(glU3vCmdBuffer, (uint8_t *)buffStat.pBuffer, buffStat.count);
-                    Cy_HBDma_Channel_DiscardBuffer(glChHandleDCICmd,&buffStat);
+                    DBG_APP_ERR("DCIcmd GetBuffer Error:%x\r\n",mgrStatus);
+                    break;
                 }
+
+                memcpy(glU3vCmdBuffer, (uint8_t *)buffStat.pBuffer, buffStat.count);
+                Cy_HBDma_Channel_DiscardBuffer(glChHandleDCICmd,&buffStat);
 
                 xTimerReset(pAppCtxt->dciTimerHandle,0);
                 Cy_U3V_DciCmdHandler(&u3vDevCtxt, glU3vCmdBuffer, glU3vResponseBuffer);
-
-                /* Queue read to fetch the next command. */
-                if (pAppCtxt->devSpeed < CY_USBD_USB_DEV_SS_GEN1) {
-                    Cy_USB_AppQueueRead(pAppCtxt, CY_U3V_EP_DCI_CMD, glU3vCmdBuffer, CMD_BUFF_SIZE);
-                }
                 break;
 
             case CY_USB_U3V_VBUS_CHANGE_INTR:
@@ -2592,11 +2449,8 @@ Cy_U3V_AppDeviceTaskHandler (void *pTaskParam)
         Cy_U3V_IsDCIStateIdle(&u3vDevCtxt, &isDciIdle);
         if (isDciIdle == 1u){
             mgrStatus = CY_HBDMA_MGR_SUCCESS;
-            if (pAppCtxt->devSpeed >= CY_USBD_USB_DEV_SS_GEN1){
-                mgrStatus = Cy_HBDma_Channel_Enable(glChHandleDCICmd, 0);
-            }else {
-                Cy_USB_AppQueueRead(pAppCtxt, CY_U3V_EP_DCI_CMD, glU3vCmdBuffer, CMD_BUFF_SIZE);
-            }
+            mgrStatus = Cy_HBDma_Channel_Enable(glChHandleDCICmd, 0);
+
             if ((mgrStatus == CY_HBDMA_MGR_SUCCESS) || (mgrStatus == CY_HBDMA_MGR_SEQUENCE_ERROR)){
                 Cy_U3V_UpdateDCIStateIdle_N(&u3vDevCtxt);
             }else{
@@ -2680,7 +2534,6 @@ Cy_USB_AppInit(cy_stc_usb_app_ctxt_t *pAppCtxt,
     pAppCtxt->pCpuDw0Base = pCpuDw0Base;
     pAppCtxt->pCpuDw1Base = pCpuDw1Base;
     pAppCtxt->pUsbdCtxt = pUsbdCtxt;
-    pAppCtxt->u3vPendingBufCnt = 0;
 
     /*
      * Callbacks registered with USBD layer. These callbacks will be called
@@ -2755,6 +2608,10 @@ Cy_USB_AppInit(cy_stc_usb_app_ctxt_t *pAppCtxt,
     /* Zero out the EP0 test buffer. */
     memset ((uint8_t *)Ep0TestBuffer, 0, sizeof(Ep0TestBuffer));
 
+#if PTM_ENABLE
+    Cy_PTM_Init();
+#endif
+
     return;
 } /* end of function. */
 
@@ -2827,49 +2684,6 @@ Cy_USB_AppRegisterCallback (cy_stc_usb_app_ctxt_t *pAppCtxt)
     return;
 }   /* end of function. */
 
-/****************************************************************************
-* Function Name: Cy_USB_AppSetupEndpDmaParamsHs
-******************************************************************************
-* Summary:
-*  Configure and enable HBW DMA channels.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param pEndpDscr
-* Endpoint descriptor pointer
-*
-* \return
-* None
-*
- *******************************************************************************/
-static void
-Cy_USB_AppSetupEndpDmaParamsHs (cy_stc_usb_app_ctxt_t *pAppCtxt,
-                              uint8_t *pEndpDscr)
-{
-    cy_stc_app_endp_dma_set_t *pEndpDmaSet;
-    DW_Type *pDW;
-    uint32_t endpNumber, dir;
-    uint16_t maxPktSize = 0x00;
-    cy_en_usb_endp_dir_t endpDirection;
-    bool stat;
-
-    Cy_USBD_GetEndpNumMaxPktDir(pEndpDscr, &endpNumber, &maxPktSize, &dir);
-
-    if (dir != 0) {
-        endpDirection = CY_USB_ENDP_DIR_IN;
-        pEndpDmaSet = &(pAppCtxt->endpInDma[endpNumber]);
-        pDW = pAppCtxt->pCpuDw1Base;
-    } else {
-        endpDirection = CY_USB_ENDP_DIR_OUT;
-        pEndpDmaSet = &(pAppCtxt->endpOutDma[endpNumber]);
-        pDW = pAppCtxt->pCpuDw0Base;
-    }
-
-    stat = Cy_USBHS_App_EnableEpDmaSet(pEndpDmaSet, pDW, endpNumber, endpNumber, endpDirection, maxPktSize);
-    DBG_APP_INFO("Enable EPDmaSet: endp=%x dir=%x stat=%x\r\n", endpNumber, endpDirection, stat);
-}   /* end of function  */
-
 /*****************************************************************************
  * Function Name: Cy_USB_AppSetupEndpDmaParamsSs
  ******************************************************************************
@@ -2895,6 +2709,7 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
     cy_stc_app_endp_dma_set_t *pEndpDmaSet;
     uint32_t endpNumber, dir;
     uint16_t maxPktSize;
+    bool isUsb2 = (pAppCtxt->devSpeed <= CY_USBD_USB_DEV_HS);
 
     Cy_USBD_GetEndpNumMaxPktDir(pEndpDscr, &endpNumber, &maxPktSize, &dir);
 
@@ -2910,6 +2725,7 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
     dmaConfig.consSck[1]     = (cy_hbdma_socket_id_t)0;    /* Consumer Socket ID: None */
     dmaConfig.eventEnable    = 0;                          /* No events to be sent. */
     dmaConfig.userCtx        = (void *)(pAppCtxt);          /* Pass the application context as user context. */
+    dmaConfig.usbMaxPktSize  = maxPktSize;
 
     if (dir) {
         /* Its IN endpoint which means DATA device->Host */
@@ -2919,17 +2735,32 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
         /* Create channel which will move data from SRAM to USB endpoint. */
         if (endpNumber == CY_U3V_EP_DCI_RSP)
         {
-            glChHandleDCIRsp = &(pEndpDmaSet->hbDmaChannel);
+            if (glChHandleDCIRsp != NULL) {
+                /* Make sure channel is created afresh when SET_CONFIG is handled. */
+                Cy_HBDma_Channel_Disable(glChHandleDCIRsp);
+                Cy_HBDma_Channel_Destroy(glChHandleDCIRsp);
+                glChHandleDCIRsp = NULL;
+            }
 
             dmaConfig.size           = CMD_BUFF_SIZE;  /* DMA Buffer size in bytes */
             dmaConfig.prodBufSize    = CMD_BUFF_SIZE;
-            dmaConfig.chType         = CY_HBDMA_TYPE_MEM_TO_IP;  /* DMA Channel type: from HB-RAM to USB3-IP */
+            dmaConfig.chType         = CY_HBDMA_TYPE_MEM_TO_IP;  /* DMA Channel type: from HB-RAM to USB-IP */
             dmaConfig.prodSck[0]     = CY_HBDMA_VIRT_SOCKET_WR;
             dmaConfig.consSck[0]     = (cy_hbdma_socket_id_t)(CY_HBDMA_USBEG_SOCKET_00 + endpNumber);
             dmaConfig.cb             = Cy_U3V_AppCtrlDmaCb; /* HB-DMA callback */
-            dmaConfig.intrEnable     = 0x82;  /* Enable for Consume event */
+            dmaConfig.intrEnable     = LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_TRANS_DONE_Msk |
+                                       LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_CONSUME_EVENT_Msk;
+
+            /* Change consumer socket for USB-HS case. */
+            if (isUsb2) {
+                dmaConfig.consSck[0] = (cy_hbdma_socket_id_t)(CY_HBDMA_USBHS_IN_EP_00 + endpNumber);
+            }
+
             mgrStatus = Cy_HBDma_Channel_Create(pAppCtxt->pUsbdCtxt->pHBDmaMgr,
-                                          glChHandleDCIRsp, &dmaConfig);
+                    &(pEndpDmaSet->hbDmaChannel), &dmaConfig);
+            if (mgrStatus == CY_HBDMA_MGR_SUCCESS) {
+                glChHandleDCIRsp = &(pEndpDmaSet->hbDmaChannel);
+            }
         }
         else if (endpNumber == CY_U3V_EP_DSI_STREAM)
         {
@@ -2944,9 +2775,6 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
                 glChHandleDSI = NULL;
             }
 
-            glChHandleDSI = &(pEndpDmaSet->hbDmaChannel);
-            pAppCtxt->u3vPendingBufCnt = 0;
-
 #if U3V_INMEM_EN
             dmaConfig.size           = 256;                      /* DMA Buffer size in bytes */
             dmaConfig.count          = U3V_INMEM_BUFFER_COUNT;   /* DMA Buffer Count */
@@ -2958,6 +2786,10 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
             dmaConfig.intrEnable     = LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_PRODUCE_EVENT_Msk |
                                        LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_CONSUME_EVENT_Msk;
             dmaConfig.eventEnable    = 0x0;
+
+            if (isUsb2) {
+                dmaConfig.consSck[0]     = (cy_hbdma_socket_id_t)(CY_HBDMA_USBHS_IN_EP_00 + endpNumber);
+            }
 #else
             /* Create channel which will move data from LVDS to USB endpoint. */
             dmaConfig.size           = STREAM_DMA_BUFFER_SIZE;  /* DMA Buffer size in bytes */
@@ -2982,10 +2814,9 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
             dmaConfig.cb             = Cy_U3V_AppStreamDmaCallback;  /* HB-DMA callback */
 #endif /* ((INMD_EN) || ((FPGA_ADDS_HEADER) && (AUTO_DMA_EN))) */
 
-            if (pAppCtxt->devSpeed <= CY_USBD_USB_DEV_HS) {
-                dmaConfig.chType      = CY_HBDMA_TYPE_IP_TO_MEM;
-                dmaConfig.consSck[0]  = (cy_hbdma_socket_id_t)0;
-                dmaConfig.count       = 1;     /* Use a single buffer in USB-HS use case. */
+            if (isUsb2) {
+                dmaConfig.chType      = CY_HBDMA_TYPE_IP_TO_IP;
+                dmaConfig.consSck[0]  = (cy_hbdma_socket_id_t)(CY_HBDMA_USBHS_IN_EP_00 + endpNumber);
                 dmaConfig.eventEnable = 0;
                 dmaConfig.intrEnable  = LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_PRODUCE_EVENT_Msk |
                                         LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_CONSUME_EVENT_Msk;
@@ -2997,8 +2828,10 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
             DBG_APP_INFO(" DMA Channel Config - DMA buffer Size: %d, Producer buffer count: %d \n\r",dmaConfig.size,dmaConfig.count);
             /* Create an IP to MEM channel to receive data from the SIP in the case of USB 2.x connection. */
             mgrStatus = Cy_HBDma_Channel_Create(pAppCtxt->pUsbdCtxt->pHBDmaMgr,
-                                        glChHandleDSI, &dmaConfig);
+                    &(pEndpDmaSet->hbDmaChannel), &dmaConfig);
             if (mgrStatus == CY_HBDMA_MGR_SUCCESS) {
+                glChHandleDSI = &(pEndpDmaSet->hbDmaChannel);
+
 #if LVDS_LB_EN
                 /* Use default DMA adapter settings when Link Loopback is being used. */
                 Cy_HBDma_Mgr_SetUsbEgressAdapterDelay(pAppCtxt->pUsbdCtxt->pHBDmaMgr, 0);
@@ -3010,12 +2843,9 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
             }
         }
 
-        if(mgrStatus == CY_HBDMA_MGR_SUCCESS)
-        {
+        if (mgrStatus == CY_HBDMA_MGR_SUCCESS) {
             pEndpDmaSet->valid = 1;
-        }
-        else
-        {
+        } else {
             DBG_APP_ERR("BulkIn endpNumber:%x channel create failed 0x%x\r\n", endpNumber, mgrStatus);
             return;
         }
@@ -3023,26 +2853,37 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
         /*  EP_DCI_CMD  */
         /* Its OUT endpoint which means data Host->Device. */
         pEndpDmaSet = &(pAppCtxt->endpOutDma[endpNumber]);
-        glChHandleDCICmd = &(pEndpDmaSet->hbDmaChannel);
+
+        if (glChHandleDCICmd != NULL) {
+            Cy_HBDma_Channel_Disable(glChHandleDCICmd);
+            Cy_HBDma_Channel_Destroy(glChHandleDCICmd);
+            glChHandleDCICmd = NULL;
+        }
 
         /* Create channel which moves data from USB ingress endpoint into HBW SRAM. */
-        dmaConfig.size           = CMD_BUFF_SIZE;  /* DMA Buffer size in bytes */
-        dmaConfig.bufferMode     = true;   /* DMA buffer mode  */
+        dmaConfig.size           = CMD_BUFF_SIZE;       /* DMA Buffer size in bytes */
+        dmaConfig.bufferMode     = true;                /* DMA buffer mode  */
         dmaConfig.prodBufSize    = CMD_BUFF_SIZE;
         dmaConfig.chType         = CY_HBDMA_TYPE_IP_TO_MEM;
         dmaConfig.prodSck[0]     = (cy_hbdma_socket_id_t)(CY_HBDMA_USBIN_SOCKET_00 + endpNumber);
         dmaConfig.consSck[0]     = CY_HBDMA_VIRT_SOCKET_RD;
         dmaConfig.cb             = Cy_U3V_AppCtrlDmaCb;    /* HB-DMA callback */
-        dmaConfig.intrEnable     = 0x1;  /* Enable for Producer event */
+        dmaConfig.eventEnable    = 0;
+        dmaConfig.intrEnable     = LVDSSS_LVDS_ADAPTER_DMA_SCK_INTR_PRODUCE_EVENT_Msk;
+
+        if (isUsb2) {
+            dmaConfig.prodSck[0] = (cy_hbdma_socket_id_t)(CY_HBDMA_USBHS_OUT_EP_00 + endpNumber);
+        }
+
         mgrStatus = Cy_HBDma_Channel_Create(pAppCtxt->pUsbdCtxt->pHBDmaMgr,
-                                          glChHandleDCICmd,
-                                          &dmaConfig);
+                &(pEndpDmaSet->hbDmaChannel), &dmaConfig);
 
         if (mgrStatus != CY_HBDMA_MGR_SUCCESS) {
             DBG_APP_ERR("BulkOut endpNumber:%x channel create failed 0x%x\r\n",endpNumber,mgrStatus);
             return;
         } else {
             DBG_APP_INFO("HBDMA BulkOut endpNumber:%x ChnCreate status: %x\r\n",endpNumber,mgrStatus);
+            glChHandleDCICmd = &(pEndpDmaSet->hbDmaChannel);
             pEndpDmaSet->valid = 1;
         }
     }
@@ -3066,18 +2907,12 @@ Cy_USB_AppSetupEndpDmaParamsSs (cy_stc_usb_app_ctxt_t *pAppCtxt,
 * None
 *
  *******************************************************************************/
-
 void
 Cy_USB_AppSetupEndpDmaParams (cy_stc_usb_app_ctxt_t *pAppCtxt,
                               uint8_t *pEndpDscr)
 {
     /* Create the HBW DMA channels in all cases. */
     Cy_USB_AppSetupEndpDmaParamsSs (pAppCtxt, pEndpDscr);
-
-    /* In the case of USB 2.0 connection, additionally configure the DataWire channels. */
-    if (pAppCtxt->devSpeed <= CY_USBD_USB_DEV_HS) {
-        Cy_USB_AppSetupEndpDmaParamsHs (pAppCtxt, pEndpDscr);
-    }
 }
 
 /****************************************************************************
@@ -3219,6 +3054,21 @@ Cy_USB_AppSetCfgCallback (void *pUserCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt,
         return;
     }
 
+#if FPGA_ENABLE
+    /* Identify whether we are operating in LVDS WideLink to USB 2.x transfer mode. */
+    if (
+            (lvdsContext.phyConfigP0->modeSelect == CY_LVDS_PHY_MODE_LVDS) &&
+            (lvdsContext.phyConfigP0->wideLink) &&
+            (pAppCtxt->devSpeed <= CY_USBD_USB_DEV_HS)
+       ) {
+        pAppCtxt->isLvdsWltoUsbHs = true;
+    } else {
+        pAppCtxt->isLvdsWltoUsbHs = false;
+    }
+#else
+    pAppCtxt->isLvdsWltoUsbHs = false;
+#endif /* FPGA_ENABLE */
+
     for (index = 0x00; index < numOfIntf; index++) {
         /* During Set Config command always altSetting 0 will be active. */
         pIntfDscr = Cy_USBD_GetIntfDscr(pUsbdCtxt, index, 0x00);
@@ -3271,6 +3121,20 @@ Cy_USB_AppSetCfgCallback (void *pUserCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt,
     pAppCtxt->isLpmEnabled = false;
     pAppCtxt->lpmEnableTime = Cy_USBD_GetTimerTick() + 1000;
 #endif /* USB3_LPM_ENABLE */
+
+    if (pAppCtxt->isLvdsWltoUsbHs) {
+        /* LVDS WL to USB 2.x transfer: We need to override the DMA_RDY signal as GPIO so
+         * that LVDS ingress and USB egress transfers can be made non-overlapping.
+         */
+        Cy_LVDS_PhyGpioModeEnable(LVDSSS_LVDS, 0, FX_DMA_RDY_IO, CY_LVDS_PHY_GPIO_OUTPUT,
+                CY_LVDS_PHY_GPIO_NO_INTERRUPT);
+
+        DBG_APP_TRACE("CLR FWRDY\r\n");
+        pAppCtxt->fwDmaReadyStatus = false;
+        Cy_LVDS_PhyGpioClr(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+    } else {
+        Cy_LVDS_PhyGpioModeDisable(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+    }
 
     DBG_APP_INFO("AppSetCfgCbEnd Done\r\n");
     return;
@@ -3771,9 +3635,12 @@ void Cy_USB_AppSetIntfCallback (void *pUserCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCt
 void Cy_USB_AppZlpCallback (void *pUserCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt,
                        cy_stc_usb_cal_msg_t *pMsg)
 {
-    DBG_APP_INFO("AppZlpCb\r\n");
+    cy_stc_usb_app_ctxt_t *pAppCtxt = (cy_stc_usb_app_ctxt_t *)pUserCtxt;
 
-    return;
+    /* If we have received a ZLP on OUT endpoint, pass it on to the DMA manager. */
+    if (pMsg->type == CY_USB_CAL_MSG_OUT_ZLP) {
+        Cy_HBDma_Mgr_HandleUsbShortInterrupt(pAppCtxt->pHbDmaMgrCtxt, (pMsg->data[0] & 0x7FU), 0);
+    }
 }   /* end of function. */
 
 /*******************************************************************************
@@ -3853,162 +3720,12 @@ void Cy_USB_AppSlpCallback (void *pUserCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt,
                        cy_stc_usb_cal_msg_t *pMsg)
 {
     cy_stc_usb_app_ctxt_t *pAppCtxt = (cy_stc_usb_app_ctxt_t *)pUserCtxt;
-    uint16_t rcvdLen = 0;
-    uint8_t  endpNumber = (uint8_t)pMsg->data[0];
 
-    if (endpNumber == CY_U3V_EP_DCI_CMD)
-    {
-        /* Prepare to read the short packet of data out from EPM into the DMA buffer. */
-        rcvdLen = Cy_USB_AppReadShortPacket(pAppCtxt, CY_U3V_EP_DCI_CMD, (uint16_t)pMsg->data[1]);
-
-        /* Send a trigger to the DMA channel after it has been configured. */
-        Cy_TrigMux_SwTrigger(TRIG_IN_MUX_0_USBHSDEV_TR_OUT0 + CY_U3V_EP_DCI_CMD,
-                CY_TRIGGER_TWO_CYCLES);
-
-        (void)rcvdLen;
+    /* If we have received an SLP on OUT endpoint, pass it on to the DMA manager. */
+    if (pMsg->type == CY_USB_CAL_MSG_OUT_SLP) {
+        Cy_HBDma_Mgr_HandleUsbShortInterrupt(pAppCtxt->pHbDmaMgrCtxt, (pMsg->data[0] & 0x7FU), pMsg->data[1]);
     }
 }   /* end of function. */
-
-/*******************************************************************************
-* Function name: Cy_USB_AppQueueRead
-****************************************************************************//**
-*
-* Function to queue read operation on an OUT endpoint.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* USB endpoint number
-*
-* \param pBuffer
-* data buffer pointer
-*
-* \param dataSize
-* data size
-*
-* \return
-* None
-*
-********************************************************************************/
-void
-Cy_USB_AppQueueRead (cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endpNumber, uint8_t *pBuffer, uint16_t dataSize)
-{
-    cy_stc_app_endp_dma_set_t      *dmaset_p;
-
-    /* Null pointer checks. */
-    if ((pAppCtxt == NULL) || (pAppCtxt->pUsbdCtxt == NULL) ||
-            (pAppCtxt->pCpuDw0Base == NULL) || (pBuffer == NULL) || (dataSize == 0))
-    {
-        DBG_APP_ERR("QueueRead: BadParam\r\n");
-        return;
-    }
-
-    /* Verify that the selected endpoint is valid and the dataSize is non-zero. */
-    dmaset_p  = &(pAppCtxt->endpOutDma[endpNumber]);
-    if (dmaset_p->valid == 0)
-    {
-        DBG_APP_ERR("QueueRead:BadParam\r\n");
-        return;
-    }
-
-    Cy_USBHS_App_QueueRead(dmaset_p, pBuffer, dataSize);
-
-} /* end of function */
-
-
-/*******************************************************************************
-* Function name: Cy_USB_AppReadShortPacket
-****************************************************************************//**
-*
-* Function to modify an ongoing DMA read operation to take care of a short packet.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* USB endpoint number
-*
-* \param pktSize
-* data packet size
-*
-*
-* \return
-* Total size of data in the DMA buffer including data which was already read by the channel
-*
-********************************************************************************/
-uint16_t
-Cy_USB_AppReadShortPacket (cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endpNumber, uint16_t pktSize)
-{
-    cy_stc_app_endp_dma_set_t *dmaset_p;
-    uint16_t dataSize = 0;
-
-    /* Null pointer checks. */
-    if ((pAppCtxt == NULL) || (pAppCtxt->pUsbdCtxt == NULL) || (pAppCtxt->pCpuDw0Base == NULL))
-    {
-        DBG_APP_ERR("ReadSLP:NULL\r\n");
-        return 0;
-    }
-
-    /* Verify that the selected endpoint is valid. */
-    dmaset_p = &(pAppCtxt->endpOutDma[endpNumber]);
-    if (dmaset_p->valid == 0)
-    {
-        DBG_APP_ERR("ReadSLP:BadParam\r\n");
-        return 0;
-    }
-
-    /* The code assumes that the channel is active. */
-    dataSize = Cy_USBHS_App_ReadShortPacket(dmaset_p, pktSize);
-    return dataSize;
-} /* end of function */
-
-/*******************************************************************************
-* Function name: Cy_USB_AppQueueWrite
-****************************************************************************//**
-*
-* Queue USBHS Write on the USB endpoint
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* Endpoint number
-*
-* \param pBuffer
-* Data Buffer Pointer
-*
-* \param dataSize
-* DataSize to send on USB bus
-*
-* \return
-* None
-*
-********************************************************************************/
-void Cy_USB_AppQueueWrite(cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endpNumber,
-                          uint8_t *pBuffer, uint16_t dataSize)
-{
-    cy_stc_app_endp_dma_set_t *dmaset_p;
-
-    /* Null pointer checks. */
-    if ((pAppCtxt == NULL) || (pAppCtxt->pUsbdCtxt == NULL) ||
-            (pAppCtxt->pCpuDw1Base == NULL) || (pBuffer == NULL)) {
-        DBG_APP_ERR("QueueWrite Err0\r\n");
-        return;
-    }
-
-    /*
-     * Verify that the selected endpoint is valid and the dataSize
-     * is non-zero.
-     */
-    dmaset_p = &(pAppCtxt->endpInDma[endpNumber]);
-    if ((dmaset_p->valid == 0) || (dataSize == 0)) {
-        DBG_APP_ERR("QueueWrite Err1\r\n");
-        return;
-    }
-
-    Cy_USBHS_App_QueueWrite(dmaset_p, pBuffer, dataSize);
-} /* end of function */
 
 /*******************************************************************************
 * Function name: Cy_USB_AppInitDmaIntr
@@ -4062,41 +3779,6 @@ void Cy_USB_AppInitDmaIntr(uint32_t endpNumber, cy_en_usb_endp_dir_t endpDirecti
         }
     }
 } /* end of function. */
-
-/*******************************************************************************
-* Function name: Cy_USB_AppClearDmaInterrupt
-****************************************************************************//**
-*
-* Clear DMA Interrupt
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* Endpoint number
-*
-* \param endpDirection
-* Endpoint direction
-*
-* \return
-* None
-*
-********************************************************************************/
-void Cy_USB_AppClearDmaInterrupt(cy_stc_usb_app_ctxt_t *pAppCtxt,
-                                 uint32_t endpNumber, cy_en_usb_endp_dir_t endpDirection)
-{
-    if ((pAppCtxt != NULL) && (endpNumber > 0) &&
-            (endpNumber < CY_USB_MAX_ENDP_NUMBER)) {
-        if (endpDirection == CY_USB_ENDP_DIR_IN) {
-            Cy_USBHS_App_ClearDmaInterrupt(&(pAppCtxt->endpInDma[endpNumber]));
-        } else  {
-            Cy_USBHS_App_ClearDmaInterrupt(&(pAppCtxt->endpOutDma[endpNumber]));
-        }
-    }
-} /* end of function. */
-
-
-
 
 /*******************************************************************************
 * Function name: Cy_CheckStatus

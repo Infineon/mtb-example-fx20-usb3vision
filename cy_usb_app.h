@@ -6,7 +6,7 @@
 *
 *******************************************************************************
 * \copyright
-* (c) (2024), Cypress Semiconductor Corporation (an Infineon company) or
+* (c) (2026), Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.
 *
 * SPDX-License-Identifier: Apache-2.0
@@ -60,6 +60,8 @@ extern "C" {
 #define CLR_BIT(byte, mask)                                        (byte) &= ~(mask)
 #define CHK_BIT(byte, mask)                                        (byte) & (mask)
 
+#define FX_DMA_RDY_IO                   (CY_LVDS_PHY_GPIO_CTL5) /* LVCMOS IO used as DMA-Ready signal to FPGA. */
+
 #if (LVCMOS_EN)
 #define LVCMOS_DDR_EN                                               (1)
 #endif /* LVCMOS_EN  */
@@ -82,37 +84,44 @@ extern "C" {
 #endif /* ACTIVE_SERIAL */
 
 #if (LVDS_LB_EN && FPGA_ENABLE)
-#error LOG_COLOR(RED, "INVALID: LVDS_LB_EN WITH FPGA_ENABLE");
+#error "Invalid configuration: LVDS_LB_EN with FPGA_ENABLE"
 #endif /* LVDS_LB_EN && FPGA_ENABLE */
 
 #if (FPGA_ADDS_HEADER && LVDS_LB_EN)
-#error LOG_COLOR(RED, "INVALID: LOOPBACK WITH UVC_HEADER_BY_FPGA");
+#error "Invalid configuration: LOOPBACK with UVC_HEADER_BY_FPGA"
 #endif /* FPGA_ADDS_HEADER && LVDS_LB_EN */
 
 #if (LVDS_LB_EN && INMD_EN)
-#error LOG_COLOR(RED, "INVALID: LVDS_LB_EN WITH INMD ");
+#error "Invalid configuration: LVDS_LB_EN with INMD"
 #endif /* LVDS_LB_EN && INMD_EN */
 
 #if (FPGA_ADDS_HEADER && INMD_EN)
-#error LOG_COLOR(RED, "INVALID: FPGA_ADDS_HEADER WITH INMD_EN");
+#error "Invalid configuration: FPGA_ADDS_HEADER with INMD_EN"
 #endif /* LVDS_LB_EN && INMD_EN */
 
 #if (LVCMOS_EN && INMD_EN)
-#error LOG_COLOR(RED, "INVALID: INMD WITH LVCMOS_EN");
+#error "Invalid configuration: INMD with LVCMOS_EN"
 #endif /* LVCMOS_EN && INMD_EN*/
 
 #if ((!LVCMOS_EN) && LVCMOS_DDR_EN)
-#error LOG_COLOR(RED, "INVALID: LVCMOS_DDR_EN WITH LVDS");
+#error "Invalid configuration: LVCMOS_DDR_EN with LVDS"
 #endif /* LVCMOS_EN && INMD_EN*/
 
 #if ((LVDS_LB_EN) && (U3V_INMEM_EN))
-#error LOG_COLOR(RED, "INVALID: INMEM WITH LVDS_LB_EN");
+#error "Invalid configuration: INMEM with LVDS_LB_EN"
 #endif /* LVCMOS_EN && INMD_EN*/
 
 #if ((FPGA_EN) && (U3V_INMEM_EN))
-#error LOG_COLOR(RED, "INVALID: INMEM WITH FPGA_EN");
+#error "Invalid configuration: INMEM with FPGA_EN"
 #endif /* LVCMOS_EN && INMD_EN*/
 
+#if (LVDS_LB_EN && CUSTOM_TRAIN_ENABLE)
+#error "Invalid configuration: LVDS_LB_EN with CUSTOM_TRAIN_ENABLE"
+#endif /* LVDS_LB_EN && CUSTOM_TRAIN_ENABLE */
+
+#if (LVCMOS_EN && CUSTOM_TRAIN_ENABLE)
+#error "Invalid configuration: LVCMOS_EN with CUSTOM_TRAIN_ENABLE"
+#endif /* LVCMOS_EN && CUSTOM_TRAIN_ENABLE */
 
 /* GPIO port pins*/
 #define TI180_INIT_RESET_GPIO                                       (P4_3_GPIO)
@@ -243,8 +252,7 @@ struct cy_stc_usb_app_ctxt_
     uint32_t dcitimerExpiry;
 
     /* U3V streaming related flags. */
-    uint8_t u3vPendingBufCnt;
-    bool    u3vFlowCtrlFlag;
+    bool u3vFlowCtrlFlag;
     bool dmaInterruptDisabled;
 
     uint32_t *pUsbEvtLogBuf;
@@ -270,6 +278,9 @@ struct cy_stc_usb_app_ctxt_
     bool isPartialBuf;
     uint32_t fullBufCount;
     uint32_t partialBufSize;
+
+    bool     isLvdsWltoUsbHs;                   /* Whether we are streaming from LVDS WideLink to USBHS. */
+    bool     fwDmaReadyStatus;                  /* Firmware based DMA ready status. */
 };
 
 /* LVDS loopback configuration */
@@ -854,77 +865,6 @@ void Cy_USB_AppSlpCallback(void *pUserCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt, c
 ********************************************************************************/
 void CyApp_RegisterUsbDescriptors(cy_stc_usb_app_ctxt_t *pAppCtxt, cy_en_usb_speed_t usbSpeed);
 
-/*******************************************************************************
-* Function name: Cy_USB_AppQueueWrite
-****************************************************************************//**
-*
-* Queue USBHS Write on the USB endpoint
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* Endpoint number
-*
-* \param pBuffer
-* Data Buffer Pointer
-*
-* \param dataSize
-* DataSize to send on USB bus
-*
-* \return
-* None
-*
-********************************************************************************/
-void Cy_USB_AppQueueWrite(cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endpNumber,  
-                         uint8_t *pBuffer, uint16_t dataSize);
-
-/*******************************************************************************
-* Function name: Cy_USB_AppQueueRead
-****************************************************************************//**
-*
-* Function to queue read operation on an OUT endpoint.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* USB endpoint number
-*
-* \param pBuffer
-* data buffer pointer
-*
-* \param dataSize
-* data size
-*
-* \return
-* None
-*
-********************************************************************************/
-void Cy_USB_AppQueueRead(cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endpNumber, uint8_t *pBuffer, uint16_t dataSize);
-
-/*******************************************************************************
-* Function name: Cy_USB_AppReadShortPacket
-****************************************************************************//**
-*
-* Function to modify an ongoing DMA read operation to take care of a short packet.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* USB endpoint number
-*
-* \param pktSize
-* data packet size
-*
-*
-* \return
-* Total size of data in the DMA buffer including data which was already read by the channel
-*
-********************************************************************************/ 
-uint16_t Cy_USB_AppReadShortPacket(cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endpNumber, uint16_t pktSize);
-
 /*****************************************************************************
 * Function Name: Cy_USB_AppDisableEndpDma
 ******************************************************************************
@@ -939,56 +879,6 @@ uint16_t Cy_USB_AppReadShortPacket(cy_stc_usb_app_ctxt_t *pAppCtxt, uint8_t endp
 * void
 *****************************************************************************/
 void Cy_USB_AppDisableEndpDma(cy_stc_usb_app_ctxt_t *pAppCtxt);
-
-/*****************************************************************************
-* Function Name: Cy_U3V_AppHandleSendCompletion
-******************************************************************************
-* Summary:
-* Function that handles DMA transfer completion on the USB-HS BULK-IN
-* endpoint. This is equivalent to the receipt of a consume event in the USB-SS use
-* case and we can discard the active data buffer on the LVDS side.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \return
-* None
-*
- *******************************************************************************/
-void Cy_U3V_AppHandleSendCompletion(cy_stc_usb_app_ctxt_t *pAppCtxt);
-
-/*****************************************************************************
-* Function Name: Cy_U3V_AppResponseSendCompletion
-******************************************************************************
-* Summary:
-* Function that handles DMA transfer completion on the USB-HS BULK-IN
-* endpoint. This is equivalent to the receipt of a cosnume event in the USB-SS use
-* case.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \return
-* None
-*
- *******************************************************************************/
-void Cy_U3V_AppResponseSendCompletion(cy_stc_usb_app_ctxt_t *pAppCtxt);
-
-/*****************************************************************************
-* Function Name: Cy_U3V_AppCommandRecvCompletion
-******************************************************************************
-* Summary:
-* Function that handles DMA transfer completion on the USB-HS BULK-OUT
-* endpoint used to receive U3V control commands.
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \return
-* None
-*
- *******************************************************************************/
-void Cy_U3V_AppCommandRecvCompletion(cy_stc_usb_app_ctxt_t *pAppCtxt);
 
 /*******************************************************************************
 * Function name: Cy_USB_AppInitDmaIntr
@@ -1010,28 +900,6 @@ void Cy_U3V_AppCommandRecvCompletion(cy_stc_usb_app_ctxt_t *pAppCtxt);
 *
 ********************************************************************************/
 void Cy_USB_AppInitDmaIntr(uint32_t endpNumber, cy_en_usb_endp_dir_t endpDirection, cy_israddress userIsr);
-
-/*******************************************************************************
-* Function name: Cy_USB_AppClearDmaInterrupt
-****************************************************************************//**
-*
-* Clear DMA Interrupt
-*
-* \param pAppCtxt
-* application layer context pointer.
-*
-* \param endpNumber
-* Endpoint number
-*
-* \param endpDirection
-* Endpoint direction
-*
-* \return
-* None
-*
-********************************************************************************/
-void Cy_USB_AppClearDmaInterrupt(cy_stc_usb_app_ctxt_t *pAppCtxt, uint32_t endpNumber, 
-                                    cy_en_usb_endp_dir_t endpDirection);
 
 /*****************************************************************************
  * Function Name: Cy_USB_SSConnectionEnable

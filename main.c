@@ -6,7 +6,7 @@
 *
 *******************************************************************************
 * \copyright
-* (c) (2021-2023), Cypress Semiconductor Corporation (an Infineon company) or
+* (c) (2026), Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.
 *
 * SPDX-License-Identifier: Apache-2.0
@@ -76,10 +76,57 @@
 
 #if PTM_ENABLE
 /* RTOS SW timer specific stuff */
-/* 100 ms */
+/* 2000 ms period. */
 #define AUTO_RELOAD_TIMER_PERIOD (pdMS_TO_TICKS(2000UL))
 TimerHandle_t xAutoReloadTimer;
 BaseType_t xTimerStarted;
+
+/*****************************************************************************
+* Function Name: ITP_EnableCB
+******************************************************************************
+* Summary:
+*  Callback function for software timer
+*
+* Parameters:
+*  xTimer
+
+* Return:
+*  Does not return.
+*****************************************************************************/
+void ITP_EnableCB(TimerHandle_t xTimer)
+{
+    Cy_USBSS_Cal_PTMConfig(&ssCalCtxt, true);
+}
+
+/*****************************************************************************
+* Function Name: Cy_SoftwareTimerInit
+******************************************************************************
+* Summary:
+*  Does some init for running rtos based auto reload software timer
+*  which periodically enables ITP interrupt for LDM exchange mechanism
+*
+* Parameters:
+*  void
+
+* Return:
+*  Does not return.
+*****************************************************************************/
+void Cy_PTM_Init(void)
+{
+    DBG_USBD_INFO("Initializing software timer\r\n");
+    xAutoReloadTimer = xTimerCreate("AutoReload",
+            AUTO_RELOAD_TIMER_PERIOD,
+            pdTRUE,
+            0,
+            ITP_EnableCB);
+    xTimerStarted = xTimerStart(xAutoReloadTimer, 0);
+
+    /* Configure to select 14 bits from Bus interval counter
+       for both links (Widelink)
+    */
+    LVDSSS_LVDS->SCRSS_VALUE_CFG[0] = 0x0AUL;
+    LVDSSS_LVDS->SCRSS_VALUE_CFG[1] = 0x0AUL;
+}
 #endif /* PTM_ENABLE */
 
 static uint32_t g_UsbEvtLogBuf[512u];
@@ -475,7 +522,7 @@ cy_stc_lvds_md_config_t mdArray0_U3V_LEADER[16] = {
     {CY_LVDS_MD_EVENT_COUNTER0_DW1_H, CY_LVDS_MD_VARIABLE},
     {0x0000, CY_LVDS_MD_CONSTANT},                              /* Reserved (2 Bytes) */
     {0x0001, CY_LVDS_MD_CONSTANT},                              /* Payload Type=0x0001 Uncompressed image data (2 Bytes) */
-    {0x0000, CY_LVDS_MD_CONSTANT},                              /* Timestamp (8 Bytes) */
+    {CY_LVDS_MD_SCR_TIMER1_L, CY_LVDS_MD_VARIABLE},        /* Timestamp (8 Bytes) */
     {0x0000, CY_LVDS_MD_CONSTANT},
     {0x0000, CY_LVDS_MD_CONSTANT},
     {0x0000, CY_LVDS_MD_CONSTANT},
@@ -517,6 +564,77 @@ cy_stc_lvds_md_config_t mdArray0_U3V_Trailer[16] = {
 };
 #endif /* INMD_EN */
 
+#if CUSTOM_TRAIN_ENABLE
+
+/****************************************************************************
+ * Function Name: Cy_LVDS_InitAndTrain
+ ****************************************************************************
+ *
+ * Function to initialize the LVDS block, complete custom training and then
+ * de-initialize the block.
+ *
+ ***************************************************************************/
+static void
+Cy_LVDS_InitAndTrain (
+        void)
+{
+    uint32_t intState;
+
+    /* First initialize the LVDS block in char mode for custom training. */
+    Cy_LVDS_CustomTraining_Select(true, &HBW_MgrCtxt);
+    Cy_LVDS_Init(LVDSSS_LVDS, 0, &cy_lvds0_config, &lvdsContext);
+
+    /* Thread errors are expected during custom training. Don't register for those errors here. */
+    Cy_LVDS_SetInterruptMask(LVDSSS_LVDS,
+            LVDSSS_LVDS_LVDS_INTR_WD0_LNK0_TRAINING_DONE_Msk |
+            LVDSSS_LVDS_LVDS_INTR_WD0_LNK1_TRAINING_DONE_Msk|
+            LVDSSS_LVDS_LVDS_INTR_WD0_LNK0_TRAINING_BLK_DETECTED_Msk |
+            LVDSSS_LVDS_LVDS_INTR_WD0_LNK1_TRAINING_BLK_DETECTED_Msk |
+            LVDSSS_LVDS_LVDS_INTR_WD0_LNK0_TRAINING_BLK_DET_FAILD_Msk |
+            LVDSSS_LVDS_LVDS_INTR_WD0_LNK1_TRAINING_BLK_DET_FAILD_Msk|
+            LVDSSS_LVDS_LVDS_INTR_WD0_PHY_LINK0_INTERRUPT_Msk |
+            LVDSSS_LVDS_LVDS_INTR_WD0_PHY_LINK1_INTERRUPT_Msk);
+
+    /* Register callbacks from the LVDS driver. */
+    Cy_LVDS_RegisterCallback(LVDSSS_LVDS, &cb, &lvdsContext, &appCtxt);
+
+    /* Enable the LVDS block. */
+    Cy_LVDS_Enable(LVDSSS_LVDS);
+
+    /* Custom training code will enable the threads to receive training data.
+     * Before doing that, disable output enable on P0_CTL[5] so that FPGA does not see the BUFFER_RDY status.
+     */
+    Cy_LVDS_PhyGpioModeEnable(LVDSSS_LVDS, 0, CY_LVDS_PHY_GPIO_CTL5,
+        CY_LVDS_PHY_GPIO_OUTPUT, CY_LVDS_PHY_GPIO_NO_INTERRUPT);
+
+    /* Signal FPGA to start PHY training and then call Cy_LVDS_PhyTrainingStart() */
+    Cy_LVDS_PhyGpioSet(LVDSSS_LVDS, LINK_READY_CTL_PORT, LINK_READY_CTL_PIN);
+    Cy_LVDS_PhyTrainingStart(LVDSSS_LVDS, 0, cy_lvds0_config.phyConfig);
+
+    /* Run the training task until it completes. */
+    do {
+        vTaskDelay(1);
+    } while (Cy_LVDS_CustomTraining_Task(&lvdsContext));
+
+    DBG_APP_INFO("Custom PhyTraining is complete\r\n");
+
+    /* De-initialize the LVDS block completely. */
+    Cy_LVDS_Disable(LVDSSS_LVDS);
+    Cy_LVDS_Deinit(LVDSSS_LVDS, 0, &lvdsContext);
+
+    /* Disable and re-enable the LVDS DMA adapters. */
+    intState = Cy_SysLib_EnterCriticalSection();
+    Cy_HBDma_DeInit(&HBW_DrvCtxt);
+    Cy_HBDma_Init(LVDSSS_LVDS, USB32DEV, &HBW_DrvCtxt, 0, 0);
+    Cy_HBDma_Mgr_SetLvdsAdapterIngressMode(&HBW_MgrCtxt, true, true);
+    Cy_SysLib_ExitCriticalSection(intState);
+
+    /* Disable char mode before re-initializing the LVDS block. */
+    Cy_LVDS_CustomTraining_Select(false, &HBW_MgrCtxt);
+}
+
+#endif /* CUSTOM_TRAIN_ENABLE */
+
 /*****************************************************************************
  * Function Name: Cy_LVDS_LVCMOS_Init
  *****************************************************************************
@@ -533,10 +651,11 @@ cy_stc_lvds_md_config_t mdArray0_U3V_Trailer[16] = {
 void Cy_LVDS_LVCMOS_Init (void)
 {
     cy_en_lvds_status_t status = CY_LVDS_SUCCESS;
+
 #if LVDS_LB_EN
     Cy_USBD_AddEvtToLog(&usbdCtxt, CY_USB_EVT_INIT_LVDS_LB_EN);
     Cy_LVDS_Init(LVDSSS_LVDS,1,&cy_lvds1_config,&lvdsContext);
-    Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 3, 1, 0, 0, 0);
+    Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 3, 1, 0, 1, 4);
     LOG_COLOR("LVDS Link Loopback Enabled \r\n");
 
     cy_en_hbdma_mgr_status_t mgrstat;
@@ -563,29 +682,20 @@ void Cy_LVDS_LVCMOS_Init (void)
     }
 #endif /* LVDS_LB_EN */
 
+#if CUSTOM_TRAIN_ENABLE
+    Cy_LVDS_InitAndTrain();
+#endif /* CUSTOM_TRAIN_ENABLE */
+
 #if !LVDS_LB_EN
     /* Set Interrupt Mask for GPIF */
     Cy_LVDS_PhySetInterruptMask(LVDSSS_LVDS,0, LVDS_AFE_PHY_INTR_MASK);
     Cy_LVDS_PhySetInterruptMask(LVDSSS_LVDS,1, LVDS_AFE_PHY_INTR_MASK);
     Cy_LVDS_SetInterruptMask(LVDSSS_LVDS, LVDS_INTR_WD0_MASK);
 #endif /* LVDS_LB_EN */
+
     Cy_LVDS_RegisterCallback(LVDSSS_LVDS, &cb, &lvdsContext,&appCtxt);
 
-#if LVDS_LB_EN
-    Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 0, 0, 0, 0, 0);
-#endif /* LVDS_LB_EN */
-
-#if (INTERLEAVE_EN)
-    status = Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 0, 0, 0, 0, 1);
-    status = Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 1, 1, 0, 0, 1);
-    ASSERT_NON_BLOCK(CY_LVDS_SUCCESS == status, status);
-#else
-    status = Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 0, 0, 0, 0, 1);
-    ASSERT_NON_BLOCK(CY_LVDS_SUCCESS == status, status);
-#endif /* INTERLEAVE_EN */
-    DBG_APP_INFO("PORT0:  GPIF Thread Config \r\n");
-
-    Cy_LVDS_Init(LVDSSS_LVDS,0,&cy_lvds0_config,&lvdsContext);
+    Cy_LVDS_Init(LVDSSS_LVDS, 0, &cy_lvds0_config, &lvdsContext);
     Cy_LVDS_Enable(LVDSSS_LVDS);
     DBG_APP_INFO("PORT0:  LVDS Enable \r\n");
 	
@@ -602,9 +712,29 @@ void Cy_LVDS_LVCMOS_Init (void)
 #endif /* FPGA_ENABLE && LINK_TRAINING */
 
 #if ((!LVCMOS_EN)  && (!LVDS_LB_EN))
+#if CUSTOM_TRAIN_ENABLE
+    /* Apply the previously identified optimal slave DLL phases. */
+    Cy_LVDS_CustomTraining_ApplyResults(&lvdsContext, 0);
+#endif /* CUSTOM_TRAIN_ENABLE */
+
     status = Cy_LVDS_PhyTrainingStart(LVDSSS_LVDS, 0,cy_lvds0_config.phyConfig);
     ASSERT_NON_BLOCK(CY_LVDS_SUCCESS == status, status);
+
+#if CUSTOM_TRAIN_ENABLE
+    /* Remove GPIO override on BUFFER_RDY pin. */
+    Cy_LVDS_PhyGpioModeDisable(LVDSSS_LVDS, 0, CY_LVDS_PHY_GPIO_CTL5);
+#endif /* CUSTOM_TRAIN_ENABLE */
 #endif /* (!LVCMOS_EN) */
+
+#if (INTERLEAVE_EN)
+    status = Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 0, 0, 0, 1, 4);
+    status = Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 1, 1, 0, 1, 4);
+    ASSERT_NON_BLOCK(CY_LVDS_SUCCESS == status, status);
+#else
+    status = Cy_LVDS_GpifThreadConfig(LVDSSS_LVDS, 0, 0, 0, 1, 4);
+    ASSERT_NON_BLOCK(CY_LVDS_SUCCESS == status, status);
+#endif /* INTERLEAVE_EN */
+    DBG_APP_INFO("PORT0:  GPIF Thread Config \r\n");
 
     status = Cy_LVDS_GpifSMStart(LVDSSS_LVDS, 0, START, ALPHA_START);
     ASSERT_NON_BLOCK(CY_LVDS_SUCCESS == status, status);
@@ -704,6 +834,12 @@ void Cy_LVDS_LPM_ISR(void)
  *****************************************************************************/
 void Cy_LVDS_Port1Dma_ISR(void)
 {
+    if (appCtxt.isLvdsWltoUsbHs) {
+        /* Data received from LVDS port. Force DMA ready status to off. */
+        Cy_LVDS_PhyGpioClr(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+        appCtxt.fwDmaReadyStatus = false;
+    }
+
     /* Call the HBDMA interrupt handler with the appropriate adapter ID. */
 #if FAST_DMA_ISR
     /* If fast ISR handling is enabled, don't allow one interrupt to be pre-empted by another. */
@@ -730,6 +866,12 @@ void Cy_LVDS_Port1Dma_ISR(void)
  *****************************************************************************/
 void Cy_LVDS_Port0Dma_ISR(void)
 {
+    if (appCtxt.isLvdsWltoUsbHs) {
+        /* Data received from LVDS port. Force DMA ready status to off. */
+        Cy_LVDS_PhyGpioClr(LVDSSS_LVDS, 0, FX_DMA_RDY_IO);
+        appCtxt.fwDmaReadyStatus = false;
+    }
+
     /* Call the HBDMA interrupt handler with the appropriate adapter ID. */
 #if FAST_DMA_ISR
     /* If fast ISR handling is enabled, don't allow one interrupt to be pre-empted by another. */
@@ -846,11 +988,8 @@ void Cy_USB_EgressDma_ISR(void)
  ****************************************************************************/
 void Cy_U3V_CommandChannel_ISR(void)
 {
-    /* Clear the interrupt first. */
-    Cy_USB_AppClearDmaInterrupt(&appCtxt, CY_U3V_EP_DCI_CMD, CY_USB_ENDP_DIR_OUT);
-
-    /* Notify U3V application logic about transfer completion. */
-    Cy_U3V_AppCommandRecvCompletion(&appCtxt);
+    /* Pass the interrupt to the DMA manager. */
+    Cy_HBDma_Mgr_HandleDW0Interrupt(&HBW_MgrCtxt);
     portYIELD_FROM_ISR(true);
 }
 
@@ -868,11 +1007,8 @@ void Cy_U3V_CommandChannel_ISR(void)
  ****************************************************************************/
 void Cy_U3V_ResponseChannel_ISR(void)
 {
-    /* Clear the interrupt first. */
-    Cy_USB_AppClearDmaInterrupt(&appCtxt, CY_U3V_EP_DCI_RSP, CY_USB_ENDP_DIR_IN);
-
-    /* Notify U3V application logic about transfer completion. */
-    Cy_U3V_AppResponseSendCompletion(&appCtxt);
+    /* Pass the interrupt to the DMA manager. */
+    Cy_HBDma_Mgr_HandleDW1Interrupt(&HBW_MgrCtxt);
     portYIELD_FROM_ISR(true);
 }
 
@@ -890,11 +1026,9 @@ void Cy_U3V_ResponseChannel_ISR(void)
  ****************************************************************************/
 void Cy_U3V_StreamChannel_ISR(void)
 {
-    /* Clear the interrupt first. */
-    Cy_USB_AppClearDmaInterrupt(&appCtxt, CY_U3V_EP_DSI_STREAM, CY_USB_ENDP_DIR_IN);
-
-    /* Notify U3V application logic about transfer completion. */
-    Cy_U3V_AppHandleSendCompletion(&appCtxt);
+    /* Pass the interrupt to the DMA manager. */
+    Cy_HBDma_Mgr_HandleDW1Interrupt(&HBW_MgrCtxt);
+    portYIELD_FROM_ISR(true);
 }
 
 /*****************************************************************************
@@ -1236,6 +1370,9 @@ bool Cy_InitHbDma(void)
     /* LVDS adapter 0 is ingress only in this case. */
     Cy_HBDma_Mgr_SetLvdsAdapterIngressMode(&HBW_MgrCtxt, true, false);
 #endif /* (!LVDS_LB_EN) */
+
+    /* Register the USB stack context with the HBW DMA manager. */
+    Cy_HBDma_Mgr_RegisterUsbContext(&HBW_MgrCtxt, &usbdCtxt);
 
     return true;
 }

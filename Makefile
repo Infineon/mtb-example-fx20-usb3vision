@@ -7,15 +7,15 @@
 #
 ################################################################################
 # \copyright
-# Copyright (2024), Cypress Semiconductor Corporation (an Infineon company)
+# Copyright (2026), Cypress Semiconductor Corporation (an Infineon company)
 # SPDX-License-Identifier: Apache-2.0
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -162,7 +162,9 @@ else
             LVCMOS_EN=1 \
             FPGA_ADDS_HEADER=0 \
             INTERLEAVE_EN=0 \
-            INMD_EN=0
+            PTM_ENABLE=0 \
+            INMD_EN=0 \
+            CUSTOM_TRAIN_ENABLE=0
 endif
 endif # FWGEN
 
@@ -224,7 +226,7 @@ ifeq ($(CORE), CM4)
 	ifeq ($(TOOLCHAIN), GCC_ARM)
 	    LDFLAGS=-Wl,--start-group -mcpu=cortex-m4 -mthumb --entry=Reset_Handler -Wl,--gc-sections -g -ffunction-sections -finline-functions -Os -Wl,--end-group
 	else ifeq ($(TOOLCHAIN), ARM)
-	    LDFLAGS=--cpu=Cortex-M4 --entry=Reset_Handler --diag_suppress=L6329W,L6314W 
+	    LDFLAGS=--cpu=Cortex-M4 --entry=Reset_Handler --diag_suppress=L6329W,L6314W
 	endif
 else ifeq ($(CORE), CM0P)
 	ifeq ($(TOOLCHAIN), GCC_ARM)
