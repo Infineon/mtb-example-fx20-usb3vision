@@ -48,8 +48,8 @@
 #endif /* FPGA_ADDS_HEADER */
 
 /* Default image resolution */
-#define U3V_HRES                                (CY_U3V_RESOLUTION_4K_WIDTH)    
-#define U3V_VRES                                (CY_U3V_RESOLUTION_4K_HEIGHT)  
+#define U3V_HRES                                (CY_U3V_RESOLUTION_4K_WIDTH)
+#define U3V_VRES                                (CY_U3V_RESOLUTION_4K_HEIGHT)
 
 #define U3V_HRES_MAX                            (CY_U3V_RESOLUTION_4K_WIDTH)
 #define U3V_VRES_MAX                            (CY_U3V_RESOLUTION_4K_HEIGHT)
@@ -69,12 +69,12 @@
 
 #define STREAM_DMA_BUFFER_COUNT                 (3)
 #define U3V_FRAME_SIZE                          ((U3V_HRES * U3V_VRES * BITS_PER_PIXEL)/8)
-#define U3V_FINAL_TRANSFER_1_SIZE 	            ((U3V_FRAME_SIZE)%(STREAM_DMA_BUFFER_SIZE))
-#define U3V_NUM_FULL_BUFFERS	  	            ((U3V_FRAME_SIZE)/(STREAM_DMA_BUFFER_SIZE))
+#define U3V_FINAL_TRANSFER_1_SIZE                 ((U3V_FRAME_SIZE)%(STREAM_DMA_BUFFER_SIZE))
+#define U3V_NUM_FULL_BUFFERS                      ((U3V_FRAME_SIZE)/(STREAM_DMA_BUFFER_SIZE))
 
 /* This val should be less than U3V_ABRM_MAX_RESPONSE_TIME by 10 ms atleast */
 #define U3V_ABRM_MAX_RESPONSE_TIME              (300)
-#define U3V_WAIT_FOR_STOP_TIMEOUT_MS            (U3V_ABRM_MAX_RESPONSE_TIME - 10) 
+#define U3V_WAIT_FOR_STOP_TIMEOUT_MS            (U3V_ABRM_MAX_RESPONSE_TIME - 10)
 #define NUM_OF_STREAM_EP_SUPPORTED              (1)
 
 #if (STREAM_DMA_BUFFER_SIZE % 16 != 0)

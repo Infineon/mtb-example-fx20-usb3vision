@@ -62,10 +62,6 @@ extern "C" {
 
 #define FX_DMA_RDY_IO                   (CY_LVDS_PHY_GPIO_CTL5) /* LVCMOS IO used as DMA-Ready signal to FPGA. */
 
-#if (LVCMOS_EN)
-#define LVCMOS_DDR_EN                                               (1)
-#endif /* LVCMOS_EN  */
-
 #define LINK_TRAINING                                               (1)
 #define LINK_READY_CTL_PORT                                         (0)
 #define LINK_READY_CTL_PIN                                          (cy_en_lvds_phy_gpio_index_t)(16+6)
@@ -79,7 +75,7 @@ extern "C" {
 
 #if ACTIVE_SERIAL
 #define FPGA_CONFIG_MODE                                            (ACTIVE_SERIAL_MODE)
-#else 
+#else
 #define FPGA_CONFIG_MODE                                            (PASSIVE_SERIAL_MODE)
 #endif /* ACTIVE_SERIAL */
 
@@ -122,6 +118,18 @@ extern "C" {
 #if (LVCMOS_EN && CUSTOM_TRAIN_ENABLE)
 #error "Invalid configuration: LVCMOS_EN with CUSTOM_TRAIN_ENABLE"
 #endif /* LVCMOS_EN && CUSTOM_TRAIN_ENABLE */
+
+#if (LVCMOS_EN && !LVCMOS_DDR_EN && FPGA_ADDS_HEADER)
+#error "Unsupported configuration: Included bitfile does not support this feature"
+#endif /* LVCMOS_EN && !LVCMOS_DDR_EN && FPGA_ADDS_HEADER */
+
+#if (LVCMOS_EN && LVCMOS_DDR_EN && !WL_EN && FPGA_ADDS_HEADER)
+#error "Unsupported configuration: Included bitfile does not support this feature"
+#endif /* LVCMOS_EN && LVCMOS_DDR_EN && !WL_EN && FPGA_ADDS_HEADER */
+
+#if (INTERLEAVE_EN && INMD_EN)
+#error "Unsupported configuration: Included bitfile does not support this feature"
+#endif /* INTERLEAVE_EN && INMD_EN */
 
 /* GPIO port pins*/
 #define TI180_INIT_RESET_GPIO                                       (P4_3_GPIO)
@@ -177,11 +185,12 @@ extern "C" {
 #define VBUS_DETECT_STATE                                           (0u)
 
 #define LVCMOS_GPIF_CTRLBUS_BITMAP_WL                               (0x000C008F)
+#define LVCMOS_GPIF_CTRLBUS_BITMAP                                  (0x0000038F)
 
 typedef struct cy_stc_usb_app_ctxt_ cy_stc_usb_app_ctxt_t;
 
 /* USBD layer return code shared between USBD layer and Application layer. */
-typedef enum cy_en_usb_app_ret_code_ 
+typedef enum cy_en_usb_app_ret_code_
 {
     CY_USB_APP_STATUS_SUCCESS=0,
     CY_USB_APP_STATUS_FAILURE,
@@ -230,9 +239,9 @@ struct cy_stc_usb_app_ctxt_
     uint8_t activeCfgNum;
     cy_en_usb_enum_method_t enumMethod;
     uint8_t prevAltSetting;
-	cy_en_usb_speed_t desiredSpeed;
+    cy_en_usb_speed_t desiredSpeed;
     bool  usbConnectDone;
-    
+
     cy_stc_app_endp_dma_set_t endpInDma[CY_USB_MAX_ENDP_NUMBER];
     cy_stc_app_endp_dma_set_t endpOutDma[CY_USB_MAX_ENDP_NUMBER];
     DMAC_Type *pCpuDmacBase;
@@ -241,7 +250,7 @@ struct cy_stc_usb_app_ctxt_
 
     cy_stc_hbdma_mgr_context_t *pHbDmaMgrCtxt;
     cy_stc_usb_usbd_ctxt_t *pUsbdCtxt;
-    cy_stc_hbdma_mgr_context_t *pHbDmaMgr; 
+    cy_stc_hbdma_mgr_context_t *pHbDmaMgr;
 
     /* Global Task handles */
     TaskHandle_t u3vDevicetaskHandle;
@@ -309,14 +318,14 @@ typedef struct
 } cy_stc_lvds_loopback_mem_t;
 
 /* U3V endpoint halt state */
-typedef enum 
+typedef enum
 {
     EPH_CLEAR,
     EPH_SET
 } cy_en_u3v_eph_state_t;
 
 /* U3V endpoint type */
-typedef enum 
+typedef enum
 {
     EP_OUT,
     EP_IN
@@ -363,6 +372,11 @@ typedef enum cy_en_fpgaRegMap_t
     VAL_CMD_Q_FULL_STS = 3,
     VAL_DATAPATH_IDLE_STS = 4,
 
+    FPGA_LVDS_GEAR_RATIO_CONTROL_ADDRESS   = 0x0D,
+    LVDS_GEAR_RATIO_625_2_1                = 2,
+    LVDS_GEAR_RATIO_312P5_4_1              = 4,
+    LVDS_GEAR_RATIO_148P5_8_1             = 8,
+
     FPGA_DEV0_STREAM_ENABLE_ADDRESS = 0x20,
     CAMERA_APP_DISABLE = 0x0,
     DMA_CH_RESET = 0x01,
@@ -382,7 +396,7 @@ typedef enum cy_en_fpgaRegMap_t
     DEV0_IMAGE_HEIGHT_MSB_ADDRESS =  0x23,
     DEV0_IMAGE_WIDTH_LSB_ADDRESS =  0x24,
     DEV0_IMAGE_WIDTH_MSB_ADDRESS =  0x25,
-    
+
     DEV0_FPS_ADDRESS =  0x26,
 
 
@@ -415,7 +429,7 @@ typedef enum cy_en_fpgaRegMap_t
     HDMI_DISCONNECT = 0x00,
     HDMI_CHANNEL_CONFIG_POS = 0x01,
     HDMI_CHANNEL_CONFIG_SINGLE = 0x00,
-    HDMI_CHANNEL_CONFIG_DUAL = 0x02, 
+    HDMI_CHANNEL_CONFIG_DUAL = 0x02,
 
     VAL_MIPI_ISP_EN = 0x10,
     VAL_MIPI_CROP_ALGO = 0x20,
@@ -426,7 +440,7 @@ typedef enum cy_en_fpgaRegMap_t
     DEV0_U3V_STREAM_MODE_MULTI = 0x04,
     DEV0_U3V_MULTI_DEFAULT_CNT = 0x01,
     DEV0_U3V_MULTI_SHIFT = 0x03,
-    DEV_U3V_MAX_MULTI_COUNT = 0x1F, 
+    DEV_U3V_MAX_MULTI_COUNT = 0x1F,
 
     DEV0_ACTIVE_THREAD_INFO_ADDRESS = 0x2F,
     DEV0_ACTIVE_THREAD_INFO_SINGLE_THREAD = 0x01,
@@ -492,7 +506,7 @@ void Cy_U3V_AppGpifIntr(void *pApp);
 * Function Name: Cy_LVDS_InitLbPgm
 ******************************************************************************
 * Summary:
-* Function to initialize Link Looback 
+* Function to initialize Link Looback
 *
 * \param buffStat
 * HBDMA buffer status
@@ -514,7 +528,7 @@ void Cy_LVDS_InitLbPgm(cy_stc_hbdma_buff_status_t *buffStat, cy_stc_lvds_loopbac
 *
 * \param handle
 * HBDMA channel handle
-* 
+*
 * \param cy_en_hbdma_cb_type_t
 * HBDMA channel type
 *
@@ -528,7 +542,7 @@ void Cy_LVDS_InitLbPgm(cy_stc_hbdma_buff_status_t *buffStat, cy_stc_lvds_loopbac
 * None
 *
  *******************************************************************************/
-void Cy_HbDma_LoopbackCb(cy_stc_hbdma_channel_t *handle, cy_en_hbdma_cb_type_t type, 
+void Cy_HbDma_LoopbackCb(cy_stc_hbdma_channel_t *handle, cy_en_hbdma_cb_type_t type,
                         cy_stc_hbdma_buff_status_t *pbufStat, void *userCtx);
 
 /*****************************************************************************
@@ -540,7 +554,7 @@ void Cy_HbDma_LoopbackCb(cy_stc_hbdma_channel_t *handle, cy_en_hbdma_cb_type_t t
 * Parameters:
 * \param imageFormat
 * image format
-* 
+*
 * Return:
 * void
 *****************************************************************************/
@@ -575,8 +589,8 @@ void Cy_U3V_AppHandleFormatConversion(uint32_t imageFormat);
 * None
 *
  ************************************************************************************ */
-void Cy_USB_AppInit(cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt, 
-                    DMAC_Type *pCpuDmacBase, DW_Type *pCpuDw0Base, DW_Type *pCpuDw1Base, 
+void Cy_USB_AppInit(cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_usb_usbd_ctxt_t *pUsbdCtxt,
+                    DMAC_Type *pCpuDmacBase, DW_Type *pCpuDw0Base, DW_Type *pCpuDw1Base,
                     cy_stc_hbdma_mgr_context_t *pHbDmaMgrCtxt);
 
 /*****************************************************************************
@@ -922,7 +936,7 @@ bool Cy_USB_SSConnectionEnable(cy_stc_usb_app_ctxt_t *pAppCtxt);
  * Summary
  *  PSVP specific USB disconnect function.
  *
- * Parameters: 
+ * Parameters:
  *  \param pAppCtxt
  *  Pointer to application context structure.
  *
@@ -979,7 +993,7 @@ void Cy_LVDS_LVCMOS_Init(void);
 /*****************************************************************************
  * Function Name: Cy_U3V_CommandChannel_ISR
  *****************************************************************************
- * 
+ *
  * Handler for interrupts from the DataWire channel used to receive U3V commands
  *
  * Parameters:
@@ -993,7 +1007,7 @@ void Cy_U3V_CommandChannel_ISR(void);
 /*****************************************************************************
  * Function Name: Cy_U3V_ResponseChannel_ISR
  *****************************************************************************
- * 
+ *
  * Handler for interrupts from the DataWire channel used to send U3V responses
  *
  * Parameters:
@@ -1042,7 +1056,7 @@ void Cy_USB_AppPrintUsbEventLog(cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_usbss_ca
 *  I2C wRites to FPGA to set up Phy & Link trianing patterns
 *
 * Parameters:
-* 
+*
 *
 * Return:
 *  0 for read success, error code for unsuccess.
@@ -1101,7 +1115,7 @@ void Cy_U3V_AppDSIStart (cy_stc_usb_app_ctxt_t *pAppCtxt, cy_stc_usb_usbd_ctxt_t
 *
 * \param fps
 * Video frame rate
-* 
+*
 *
 * Return:
 *  0 for read success, error code for unsuccess.
@@ -1134,10 +1148,10 @@ void Cy_Update_LvdsLinkClock (bool isHs);
  * Parameters:
  * \param height
  *  Image height
- * 
+ *
  *  \param width
  *  Image width
- * 
+ *
  *  \param imageSize
  *  image size (in bytes)
  *
@@ -1237,6 +1251,25 @@ void Cy_FailHandler(void);
 void Cy_CheckStatusAndHandleFailure(const char *function, uint32_t line, uint8_t condition,
                              uint32_t value, uint8_t isBlocking, void (*failureHandler)());
 
+
+/*****************************************************************************
+* Function Name: Cy_App_GetLvdsPhyConfig(void)
+******************************************************************************
+* Summary:
+* Returns a pointer to the LVDS PHY configuration structure. Safe to call
+* before Cy_LVDS_Init() to access PHY parameters prior to LVDS initialization.
+*
+* \param None
+*
+* \return
+* Pointer to cy_stc_lvds_phy_config_t containing the LVDS PHY configuration.
+*
+*******************************************************************************/
+const cy_stc_lvds_phy_config_t *Cy_App_GetLvdsPhyConfig(void);
+
+#if PTM_ENABLE
+void Cy_PTM_Init(void);
+#endif
 
 
 #if defined(__cplusplus)

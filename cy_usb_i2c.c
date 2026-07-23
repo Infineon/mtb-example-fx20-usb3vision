@@ -41,12 +41,12 @@ cy_stc_scb_i2c_master_xfer_config_t write_i2c_slave = {
 };
 
 /*****************************************************************************
-* Function Name: Cy_I2C_MasterRead(CySCB_Type *base, uint16_t dev_addr, 
-                                    const uint8_t *data, uint16_t size, 
+* Function Name: Cy_I2C_MasterRead(CySCB_Type *base, uint16_t dev_addr,
+                                    const uint8_t *data, uint16_t size,
                                     bool send_stop)
 ******************************************************************************
 * Summary:
-* Low level function for reading data from I2C slave 
+* Low level function for reading data from I2C slave
 *
 * Parameters:
 * \param base
@@ -58,7 +58,7 @@ cy_stc_scb_i2c_master_xfer_config_t write_i2c_slave = {
 * \param size
 * data size (in bytes)
 * \param send_stop
-* set to 1 to send stop condition else 0 
+* set to 1 to send stop condition else 0
 *
 * Return:
 *  0 for read success, error code for unsuccess.
@@ -102,12 +102,12 @@ cy_en_scb_i2c_status_t Cy_I2C_MasterRead(CySCB_Type *base, uint16_t dev_addr, ui
 } //End of Cy_I2C_MasterRead()
 
 /*****************************************************************************
-* Function Name: Cy_I2C_MasterWrite(CySCB_Type *base, uint16_t dev_addr, 
-                                    const uint8_t *data, uint16_t size, 
+* Function Name: Cy_I2C_MasterWrite(CySCB_Type *base, uint16_t dev_addr,
+                                    const uint8_t *data, uint16_t size,
                                     bool send_stop)
 ******************************************************************************
 * Summary:
-* Low level function for writing data to I2C slave 
+* Low level function for writing data to I2C slave
 *
 * Parameters:
 * \param base
@@ -119,12 +119,12 @@ cy_en_scb_i2c_status_t Cy_I2C_MasterRead(CySCB_Type *base, uint16_t dev_addr, ui
 * \param size
 * data size (in bytes)
 * \param send_stop
-* set to 1 to send stop condition else 0 
+* set to 1 to send stop condition else 0
 *
 * Return:
 *  0 for read success, error code for unsuccess.
 *****************************************************************************/
-cy_en_scb_i2c_status_t Cy_I2C_MasterWrite(CySCB_Type *base, uint16_t dev_addr, const uint8_t *data, 
+cy_en_scb_i2c_status_t Cy_I2C_MasterWrite(CySCB_Type *base, uint16_t dev_addr, const uint8_t *data,
                                             uint16_t size, bool send_stop)
 {
     /* Clean-up hardware before transfer. Note RX FIFO is empty at here. */
@@ -216,7 +216,7 @@ cy_en_scb_i2c_status_t Cy_I2C_Read (uint16_t slaveAddress,uint16_t registerAddre
                     uint8_t dataWidth)
 ******************************************************************************
 * Summary:
-* Function to write data to i2c slave 
+* Function to write data to i2c slave
 *
 * Parameters:
 * \param slaveAddress
@@ -249,7 +249,7 @@ cy_en_scb_i2c_status_t Cy_I2C_Write (uint16_t slaveAddress,uint16_t registerAddr
         scb0_i2c_buffer[i++] = CY_USB_GET_LSB(registerAddress);
     }
     else if(1 == addressWidth) {
-        scb0_i2c_buffer[i++] = CY_USB_GET_LSB(registerAddress);  
+        scb0_i2c_buffer[i++] = CY_USB_GET_LSB(registerAddress);
     }
 
     scb0_i2c_buffer[i++] = data;
@@ -332,35 +332,35 @@ void Cy_I2C_MasterISR(void)
 *****************************************************************************/
 void ConfigureSCB0Clock(uint8_t scbIndex)
 {
-	/* Get the PERI clock frequency for the platform. */
-	uint32_t hfClkFreq = Cy_SysClk_ClkPeriGetFrequency();
+    /* Get the PERI clock frequency for the platform. */
+    uint32_t hfClkFreq = Cy_SysClk_ClkPeriGetFrequency();
 
-	/* Configure PERI 16 bit clock divider#3 for 3 MHz operation and enable it. */
-	switch (hfClkFreq)
-	{
-		case 50000000UL:
-			/* Divide 50 MHz by 16 to get 3 MHz. */
-			Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 15);
-			break;
+    /* Configure PERI 16 bit clock divider#3 for 3 MHz operation and enable it. */
+    switch (hfClkFreq)
+    {
+        case 50000000UL:
+            /* Divide 50 MHz by 16 to get 3 MHz. */
+            Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 15);
+            break;
 
-		case 60000000UL:
-			/* Divide 60 MHz by 20 to get 3 MHz. */
-			Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 19);
-			break;
+        case 60000000UL:
+            /* Divide 60 MHz by 20 to get 3 MHz. */
+            Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 19);
+            break;
 
-		case 75000000UL:
-			/* Divide 75 MHz by 25 to get 3 MHz. */
-			Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 24);
-			break;
+        case 75000000UL:
+            /* Divide 75 MHz by 25 to get 3 MHz. */
+            Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 24);
+            break;
 
-		case 100000000UL:
-			/* Divide 100 MHz by 33 to get 3 MHz. */
-			Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 32);
-			break;
+        case 100000000UL:
+            /* Divide 100 MHz by 33 to get 3 MHz. */
+            Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT, 3, 32);
+            break;
 
-		default:
-			break;
-	}
+        default:
+            break;
+    }
 
     DBG_APP_INFO("scbIndex %d hfClkFreq%d \n\r",0,hfClkFreq);
 
@@ -444,7 +444,7 @@ void Cy_USB_I2CInit (void)
     i2cCfg.highPhaseDutyCycle = 5;
 
     Cy_SCB_I2C_Init (SCB0, &i2cCfg, &I2C_context);
-    
+
     dataClock = Cy_SysClk_PeriphGetFrequency(CY_SYSCLK_DIV_16_BIT, 3);
     dataRate = Cy_SCB_I2C_SetDataRate(SCB0, I2C_DATARATE, I2C_INCLK_TARGET_FREQ);
     /* Register interrupt handler for SCB-I2C. */
@@ -457,17 +457,17 @@ void Cy_USB_I2CInit (void)
     }
     Cy_SCB_ClearRxFifo(SCB0);
     Cy_SCB_ClearTxFifo(SCB0);
-    
+
     Cy_SCB_I2C_RegisterEventCallback(SCB0,(cy_cb_scb_i2c_handle_events_t) Cy_I2C_MasterEvent,
-                                    &I2C_context);  
+                                    &I2C_context);
 
 #if CY_CPU_CORTEX_M4
     intrCfg.intrSrc = (IRQn_Type) scb_0_interrupt_IRQn;
     intrCfg.intrPriority = 1u;
     Cy_SysInt_Init(&intrCfg, Cy_I2C_MasterISR);
-    
+
     /*  Enable interrupt and I2C block */
-    NVIC_EnableIRQ((IRQn_Type)scb_0_interrupt_IRQn);  
+    NVIC_EnableIRQ((IRQn_Type)scb_0_interrupt_IRQn);
 #else
     intrCfg.intrSrc = NvicMux3_IRQn;
     intrCfg.intrPriority = 1;
@@ -475,7 +475,7 @@ void Cy_USB_I2CInit (void)
 
     Cy_SysInt_Init(&intrCfg, Cy_I2C_MasterISR);
     NVIC_EnableIRQ(intrCfg.intrSrc);
-#endif  /* CY_CPU_CORTEX_M4 */                                
+#endif  /* CY_CPU_CORTEX_M4 */
 
     Cy_SCB_I2C_Enable (SCB0);
 

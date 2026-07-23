@@ -74,60 +74,26 @@
 
 #define LVDS_AFE_PHY_INTR_MASK (LVDSSS_LVDS_AFE_PHY_INTR_MONITOR_ADJUST_FAIL_Msk)
 
-#if PTM_ENABLE
-/* RTOS SW timer specific stuff */
-/* 2000 ms period. */
-#define AUTO_RELOAD_TIMER_PERIOD (pdMS_TO_TICKS(2000UL))
-TimerHandle_t xAutoReloadTimer;
-BaseType_t xTimerStarted;
 
-/*****************************************************************************
-* Function Name: ITP_EnableCB
+/*******************************************************************************
+* Function Name: Cy_App_GetLvdsPhyConfig
 ******************************************************************************
 * Summary:
-*  Callback function for software timer
+*  Returns the LVDS PHY configuration.
 *
 * Parameters:
-*  xTimer
-
-* Return:
-*  Does not return.
-*****************************************************************************/
-void ITP_EnableCB(TimerHandle_t xTimer)
-{
-    Cy_USBSS_Cal_PTMConfig(&ssCalCtxt, true);
-}
-
-/*****************************************************************************
-* Function Name: Cy_SoftwareTimerInit
-******************************************************************************
-* Summary:
-*  Does some init for running rtos based auto reload software timer
-*  which periodically enables ITP interrupt for LDM exchange mechanism
+*  None
 *
-* Parameters:
-*  void
-
 * Return:
-*  Does not return.
+*  Pointer to the LVDS PHY configuration structure.
 *****************************************************************************/
-void Cy_PTM_Init(void)
-{
-    DBG_USBD_INFO("Initializing software timer\r\n");
-    xAutoReloadTimer = xTimerCreate("AutoReload",
-            AUTO_RELOAD_TIMER_PERIOD,
-            pdTRUE,
-            0,
-            ITP_EnableCB);
-    xTimerStarted = xTimerStart(xAutoReloadTimer, 0);
 
-    /* Configure to select 14 bits from Bus interval counter
-       for both links (Widelink)
-    */
-    LVDSSS_LVDS->SCRSS_VALUE_CFG[0] = 0x0AUL;
-    LVDSSS_LVDS->SCRSS_VALUE_CFG[1] = 0x0AUL;
+const cy_stc_lvds_phy_config_t *Cy_App_GetLvdsPhyConfig(void)
+{
+    return cy_lvds0_config.phyConfig;
 }
-#endif /* PTM_ENABLE */
+
+
 
 static uint32_t g_UsbEvtLogBuf[512u];
 static uint16_t gCurUsbEvtLogIndex = 0;
@@ -183,6 +149,62 @@ cy_stc_debug_config_t dbgCfg = {
 
 TaskHandle_t printLogTaskHandle;
 #endif /* DEBUG_INFRA_EN */
+
+#if PTM_ENABLE
+/* RTOS SW timer specific stuff */
+/* 2000 ms period. */
+#define AUTO_RELOAD_TIMER_PERIOD (pdMS_TO_TICKS(2000UL))
+TimerHandle_t xAutoReloadTimer;
+BaseType_t xTimerStarted;
+
+/*****************************************************************************
+* Function Name: ITP_EnableCB
+******************************************************************************
+* Summary:
+*  Callback function for software timer
+*
+* Parameters:
+*  xTimer
+
+* Return:
+*  Does not return.
+*****************************************************************************/
+void ITP_EnableCB(TimerHandle_t xTimer)
+{
+    Cy_USBSS_Cal_PTMConfig(&ssCalCtxt, true);
+}
+
+/*****************************************************************************
+* Function Name: Cy_SoftwareTimerInit
+******************************************************************************
+* Summary:
+*  Does some init for running rtos based auto reload software timer
+*  which periodically enables ITP interrupt for LDM exchange mechanism
+*
+* Parameters:
+*  void
+
+* Return:
+*  Does not return.
+*****************************************************************************/
+void Cy_PTM_Init(void)
+{
+    DBG_USBD_INFO("Initializing software timer\r\n");
+    xAutoReloadTimer = xTimerCreate("AutoReload",
+            AUTO_RELOAD_TIMER_PERIOD,
+            pdTRUE,
+            0,
+            ITP_EnableCB);
+    xTimerStarted = xTimerStart(xAutoReloadTimer, 0);
+
+    /* Configure to select 14 bits from Bus interval counter
+       for both links (Widelink)
+    */
+    LVDSSS_LVDS->SCRSS_VALUE_CFG[0] = 0x0AUL;
+    LVDSSS_LVDS->SCRSS_VALUE_CFG[1] = 0x0AUL;
+}
+#endif /* PTM_ENABLE */
+
 
 void Cy_SysTickIntrWrapper (void)
 {
@@ -276,10 +298,10 @@ void Cy_Update_LvdsLinkClock (bool isHs)
  * Parameters:
  * \param height
  *  Image height
- * 
+ *
  *  \param width
  *  Image width
- * 
+ *
  *  \param imageSize
  *  image size (in bytes)
  *
@@ -326,10 +348,10 @@ void Cy_Update_Metadata(uint32_t height, uint32_t width, uint32_t imageSize)
  * Parameters:
  * \param smNo
  * state machine number
- * 
+ *
  * \param gpifEvent
  * GPIF event
- * 
+ *
  * \param cntxt
  * app context
  *
@@ -349,10 +371,10 @@ void Cy_LVDS_GpifEventCb(uint8_t smNo, cy_en_lvds_gpif_event_type_t gpifEvent, v
  * Parameters:
  * \param smNo
  * state machine number
- * 
+ *
  * \param phyEvent
  * LVDS/LVCMOS PHY event
- * 
+ *
  * \param cntxt
  * app context
  *
@@ -407,7 +429,7 @@ void Cy_LVDS_PhyEventCb(uint8_t smNo, cy_en_lvds_phy_events_t phyEvent, void *cn
 
     if (phyEvent == CY_LVDS_PHY_LNK_TRAIN_BLK_DET)
     {
-    	LOG_COLOR("Port %d Training Block Detected\r\n",smNo);
+        LOG_COLOR("Port %d Training Block Detected\r\n",smNo);
         if(smNo)
         {
             glIsLVDSLink1TrainingDone = true;
@@ -440,7 +462,7 @@ void Cy_LVDS_PhyEventCb(uint8_t smNo, cy_en_lvds_phy_events_t phyEvent, void *cn
  * Parameters:
  * \param lowPowerEvent
  * low power event
- * 
+ *
  * \param cntxt
  * app context
  *
@@ -460,10 +482,10 @@ void Cy_LVDS_LowPowerEventCb(cy_en_lvds_low_power_events_t lowPowerEvent, void *
  * Parameters:
  * \param smNo
  * state machine number
- * 
+ *
  * \param gpifError
  * GPIF error
- * 
+ *
  * \param cntxt
  * app context
  *
@@ -483,10 +505,10 @@ void Cy_LVDS_GpifErrorCb(uint8_t smNo, cy_en_lvds_gpif_error_t gpifError, void *
  * Parameters:
  * \param ThNo
  * thread number
- * 
+ *
  * \param ThError
  * thread error
- * 
+ *
  * \param cntxt
  * app context
  *
@@ -611,6 +633,7 @@ Cy_LVDS_InitAndTrain (
     Cy_LVDS_PhyGpioSet(LVDSSS_LVDS, LINK_READY_CTL_PORT, LINK_READY_CTL_PIN);
     Cy_LVDS_PhyTrainingStart(LVDSSS_LVDS, 0, cy_lvds0_config.phyConfig);
 
+    DBG_APP_INFO("Starting custom training\r\n");
     /* Run the training task until it completes. */
     do {
         vTaskDelay(1);
@@ -659,7 +682,7 @@ void Cy_LVDS_LVCMOS_Init (void)
     LOG_COLOR("LVDS Link Loopback Enabled \r\n");
 
     cy_en_hbdma_mgr_status_t mgrstat;
-    cy_stc_hbdma_chn_config_t chn_conf = 
+    cy_stc_hbdma_chn_config_t chn_conf =
     {
         .size = LOOPBACK_MEM_BUF_SIZE + 0x20,
         .count = 2,
@@ -698,7 +721,7 @@ void Cy_LVDS_LVCMOS_Init (void)
     Cy_LVDS_Init(LVDSSS_LVDS, 0, &cy_lvds0_config, &lvdsContext);
     Cy_LVDS_Enable(LVDSSS_LVDS);
     DBG_APP_INFO("PORT0:  LVDS Enable \r\n");
-	
+
 #if INMD_EN
     Cy_LVDS_InitMetadata(LVDSSS_LVDS, 0, 0, 16, mdArray0_U3V_LEADER);
     Cy_LVDS_InitMetadata(LVDSSS_LVDS, 0, 1, 10, mdArray1_U3V_LEADER);
@@ -707,7 +730,6 @@ void Cy_LVDS_LVCMOS_Init (void)
 #endif /* INMD_EN */
 
 #if (FPGA_ENABLE && LINK_TRAINING)
-    Cy_SysLib_Delay(100);
     Cy_LVDS_PhyGpioSet(LVDSSS_LVDS, LINK_READY_CTL_PORT, LINK_READY_CTL_PIN);
 #endif /* FPGA_ENABLE && LINK_TRAINING */
 
@@ -1163,7 +1185,7 @@ void Cy_USB_USBSSInit (void)
     pinCfg.hsiom     = TI180_INIT_RESET_GPIO;
     gpio_status = Cy_GPIO_Pin_Init(TI180_INIT_RESET_PORT, TI180_INIT_RESET_PIN, &pinCfg);
     ASSERT_NON_BLOCK(CY_GPIO_SUCCESS == gpio_status, gpio_status);
-    
+
     Cy_GPIO_Clr(TI180_INIT_RESET_PORT, TI180_INIT_RESET_PIN);
     Cy_SysLib_Delay(20);
     Cy_GPIO_Set(TI180_INIT_RESET_PORT, TI180_INIT_RESET_PIN);
@@ -1496,7 +1518,7 @@ bool Cy_USB_SSConnectionEnable (cy_stc_usb_app_ctxt_t *pAppCtxt)
  * Summary
  *  PSVP specific USB disconnect function.
  *
- * Parameters: 
+ * Parameters:
  *  \param pAppCtxt
  *  Pointer to application context structure.
  *
@@ -1531,7 +1553,7 @@ int main (void)
 
     /* Initialize the device clocks to the desired values. */
     cybsp_init();
-    
+
     Cy_Fx3g2_InitPeripheralClocks(true, true);
 
     hfclkFreq = Cy_SysClk_ClkFastGetFrequency();
@@ -1554,10 +1576,11 @@ int main (void)
 #if !USBFS_LOGS_ENABLE
     /* Initialize the UART for logging. */
     InitUart(LOGGING_SCB_IDX);
-#endif /* USBFS_LOGS_ENABLE */
-
     Cy_Debug_LogInit(&dbgCfg);
-    Cy_SysLib_Delay(500);
+#else
+    Cy_Debug_LogInit(&dbgCfg);
+    Cy_SysLib_Delay(1000);
+#endif /* USBFS_LOGS_ENABLE */
 
     Cy_Debug_AddToLog(1, "***** FX20: USB3 Vision Application *****\r\n");
     /* Print application, USBD stack and HBDMA version information. */

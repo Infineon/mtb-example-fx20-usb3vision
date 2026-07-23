@@ -140,6 +140,7 @@ ifeq ($(FWGEN), yes)
         FPGA_ENABLE=0 \
         WL_EN=0 \
         LVCMOS_EN=0 \
+        LVCMOS_DDR_EN=0 \
         FPGA_ADDS_HEADER=0 \
         INTERLEAVE_EN=0 \
         INMD_EN=0
@@ -150,6 +151,7 @@ ifeq ($(LPBK_EN), yes)
             FPGA_ENABLE=0 \
             WL_EN=0 \
             LVCMOS_EN=0 \
+            LVCMOS_DDR_EN=0 \
             FPGA_ADDS_HEADER=0 \
             INTERLEAVE_EN=0 \
             INMD_EN=0
@@ -159,12 +161,13 @@ else
             LVDS_LB_EN=0 \
             FPGA_ENABLE=1 \
             WL_EN=1 \
-            LVCMOS_EN=1 \
+            LVCMOS_EN=0 \
+            LVCMOS_DDR_EN=0 \
             FPGA_ADDS_HEADER=0 \
             INTERLEAVE_EN=0 \
             PTM_ENABLE=0 \
             INMD_EN=0 \
-            CUSTOM_TRAIN_ENABLE=0
+            CUSTOM_TRAIN_ENABLE=1
 endif
 endif # FWGEN
 

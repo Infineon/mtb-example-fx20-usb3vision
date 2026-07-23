@@ -918,6 +918,21 @@ static cy_en_scb_i2c_status_t Cy_ConfigFpgaRegister(void)
     status = Cy_I2C_Write(FPGASLAVE_ADDR, DEV0_FPS_ADDRESS, U3V_FPS,
                            FPGA_I2C_ADDRESS_WIDTH, FPGA_I2C_DATA_WIDTH);
     ASSERT_NON_BLOCK(status == CY_SCB_I2C_SUCCESS, status);
+    /* Update the gearing ratio register based on gearing ratio in LVDS config */
+#if (!LVCMOS_EN)
+    /* Enum index: 0 - not used/no effect, 1 - 2:1@625MHz, 2 - 4:1@312.5MHz, 3 - 8:1@148.5MHz */
+    const uint8_t gearRatioRegValueLookup[] = {0, LVDS_GEAR_RATIO_625_2_1, LVDS_GEAR_RATIO_312P5_4_1, LVDS_GEAR_RATIO_148P5_8_1};
+    cy_en_lvds_phy_gear_ratio_t gearRatio = Cy_App_GetLvdsPhyConfig()->gearingRatio;
+    if ((uint32_t)gearRatio < sizeof(gearRatioRegValueLookup))
+    {
+        status = Cy_I2C_Write(FPGASLAVE_ADDR,FPGA_LVDS_GEAR_RATIO_CONTROL_ADDRESS,gearRatioRegValueLookup[gearRatio],
+                                              FPGA_I2C_ADDRESS_WIDTH,FPGA_I2C_DATA_WIDTH);
+        ASSERT_NON_BLOCK(status == CY_SCB_I2C_SUCCESS, status);
+    }
+#endif /* !LVCMOS_EN */
+
+
+
     if (status != CY_SCB_I2C_SUCCESS){
         DBG_APP_ERR("FPGA register config failed\n\r\r\n");
     }
