@@ -74,7 +74,7 @@ static cy_stc_hbdma_channel_t  *glChHandleDSI;      /* Stream Channel pointer. *
 static cy_stc_hbdma_channel_t  *glChHandleDCIRsp;   /* U3V Response Channel pointer. */
 static cy_stc_hbdma_channel_t  *glChHandleDCICmd;   /* U3V Command Channel pointer. */
 
-#if ((!LVDS_LB_EN) && (!FPGA_ADDS_HEADER))
+#if ((FPGA_ENABLE) && (!LVDS_LB_EN) && (!FPGA_ADDS_HEADER))
 static bool glIsLeader   = true;                    /* Leader Block Tracker */
 static bool glIsTrailer  = false;                   /* Trailer Block Tracker */
 #endif
@@ -1416,7 +1416,7 @@ Cy_U3V_AppDSIStop (
         /* Update the flag so that the application thread is notified of this. */
         glU3VIsApplnActive = false;
 
-#if ((!LVDS_LB_EN) && (!FPGA_ADDS_HEADER))
+#if ((FPGA_ENABLE) && (!LVDS_LB_EN) && (!FPGA_ADDS_HEADER))
         /* Next frame should start with Leader */
         glIsLeader  = true;
         glIsTrailer = false;
@@ -1973,7 +1973,7 @@ Cy_U3V_AppHandleProduceEvent (
             pAppCtxt->glProd = 0;
             pAppCtxt->glCons = 0;
 
-#if !FPGA_ADDS_HEADER
+#if ((FPGA_ENABLE) && (!FPGA_ADDS_HEADER))
             glIsTrailer = true; /*Received Partial buffer - next is trailer*/
 #endif
         }

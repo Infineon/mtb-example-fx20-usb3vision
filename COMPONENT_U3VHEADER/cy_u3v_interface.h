@@ -157,7 +157,7 @@ typedef struct cy_stc_u3v_frame_params_t {
     unsigned short trailerSize;
 } cy_stc_u3v_frame_params_t;
 
-/* U3V inetrafce configuration */
+/* U3V interface configuration */
 typedef struct cy_stc_u3v_interface_config_t {
     unsigned char u3vChannelNum;                                                                                                              /* U3V channel number */
     cy_stc_u3v_brm_cfg_t* BRM_Config;                                                                                                         /* Pointer to U3V register configuration */

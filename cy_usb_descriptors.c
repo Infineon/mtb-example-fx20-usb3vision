@@ -89,7 +89,7 @@
         (ENABLE_U3V_EVT_INTERFACE0 * U3V_HS_EVTINTF_DSCR_LENGTH) )
 
 /* Standard device descriptor for full speed (FS) */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBFSDeviceDscr[32] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBFSDeviceDscr[32] __attribute__ ((aligned (32)));
 const uint8_t FullSpeedDeviceDescr[] =
 {
     0x12,                           /* Descriptor size */
@@ -111,7 +111,7 @@ const uint8_t FullSpeedDeviceDescr[] =
 };
 
 /* Standard device descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSB20DeviceDscr[18] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSB20DeviceDscr[18] __attribute__ ((aligned (32)));
 const uint8_t Usb2DeviceDscr[] =
 {
     0x12,                           /* Descriptor size */
@@ -132,7 +132,7 @@ const uint8_t Usb2DeviceDscr[] =
     0x01                            /* Number of configurations */
 };
 
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSB30DeviceDscr[18] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSB30DeviceDscr[18] __attribute__ ((aligned (32)));
 const uint8_t Usb3DeviceDscr[] =
 {
     0x12,                           /* Descriptor size */
@@ -154,7 +154,7 @@ const uint8_t Usb3DeviceDscr[] =
 };
 
 /* Binary device object store descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBBOSDscr[64] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBBOSDscr[64] __attribute__ ((aligned (32)));
 const uint8_t BosDescriptor[] =
 {
     0x05,                           /* Descriptor size */
@@ -223,7 +223,7 @@ USB3_DESC_ATTRIBUTES uint8_t CyFxBOSDscr_Gen2[] =
 };
 
 /* Full Speed Configuration Descriptor*/
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBFSConfigDscr[64] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBFSConfigDscr[64] __attribute__ ((aligned (32)));
 const uint8_t FullSpeedConfigDescr[] =
 {
     /* Configuration descriptor */
@@ -249,7 +249,7 @@ const uint8_t FullSpeedConfigDescr[] =
 };
 
 /* Standard High Speed Configuration Descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBHSConfigDscr[512] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBHSConfigDscr[512] __attribute__ ((aligned (32)));
 const uint8_t HighSpeedConfigDescr[] =
 {
     /* Configuration descriptor */
@@ -358,7 +358,7 @@ const uint8_t HighSpeedConfigDescr[] =
 };
 
 /* Standard super speed configuration descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBSSConfigDscr[1024] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBSSConfigDscr[1024] __attribute__ ((aligned (32)));
 const uint8_t SuperSpeedConfigDescr[] =
 {
     /* Configuration descriptor */
@@ -496,7 +496,7 @@ const uint8_t SuperSpeedConfigDescr[] =
 
 
 /* Standard device qualifier descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBDeviceQualDscr[16] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBDeviceQualDscr[16] __attribute__ ((aligned (32)));
 const uint8_t DeviceQualDescriptor[]  =
 {
     0x0A,                           /* Descriptor size */
@@ -511,7 +511,7 @@ const uint8_t DeviceQualDescriptor[]  =
 };
 
 /* Standard language ID string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBStringLangIDDscr[16] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBStringLangIDDscr[16] __attribute__ ((aligned (32)));
 const uint8_t LangStringDescr[] =
 {
     0x04,                           /* Descriptor size */
@@ -520,7 +520,7 @@ const uint8_t LangStringDescr[] =
 };
 
 /* Standard manufacturer string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBManufactureDscr[32] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBManufactureDscr[32] __attribute__ ((aligned (32)));
 const uint8_t MfgStringDescr[] =
 {
     0x12,                           /* Descriptor size */
@@ -536,7 +536,7 @@ const uint8_t MfgStringDescr[] =
 };
 
 /* Standard product string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBProductDscr[16] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBProductDscr[16] __attribute__ ((aligned (32)));
 const uint8_t ProdStringDescr[] =
 {
     0x0A,                           /* Descriptor Size */
@@ -548,7 +548,7 @@ const uint8_t ProdStringDescr[] =
 };
 
 /* Function string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBFunctionDscr[64] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBFunctionDscr[64] __attribute__ ((aligned (32)));
 const uint8_t  FunctionDscr[] =
 {
     0x26,                           /* Descriptor size */
@@ -576,7 +576,7 @@ const uint8_t  FunctionDscr[] =
 /* Standard GUID string descriptor */
 /* R-1cd: 04B4 + 8 unique numer ID*/
 /* CR-2cd: Add U3V before GUID on device/box*/
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBGUIDDscr[32] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBGUIDDscr[32] __attribute__ ((aligned (32)));
 const uint8_t GUIDDscr[] =
 {
     0x1A,                           /* Descriptor size */
@@ -596,7 +596,7 @@ const uint8_t GUIDDscr[] =
 };
 
 /* Serial Number string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBSNumberDscr[32] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBSNumberDscr[32] __attribute__ ((aligned (32)));
 const uint8_t SNumberDscr[] =
 {
     0x1A,                           /* Descriptor size */
@@ -616,7 +616,7 @@ const uint8_t SNumberDscr[] =
 };
 
 /* Family Name String Descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBFamilyNameDscr[16] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBFamilyNameDscr[16] __attribute__ ((aligned (32)));
 const uint8_t FamilyNameDscr[] =
 {
     0x0E,
@@ -630,7 +630,7 @@ const uint8_t FamilyNameDscr[] =
 };
 
 /* Device Version String Descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBDeviceVerDscr[16] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBDeviceVerDscr[16] __attribute__ ((aligned (32)));
 const uint8_t DeviceVerDscr[] =
 {
     0x0C,
@@ -643,7 +643,7 @@ const uint8_t DeviceVerDscr[] =
 };
 
 /* SS Configuration string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBConfigSSDscr[16] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBConfigSSDscr[16] __attribute__ ((aligned (32)));
 const uint8_t SSDscr[] =
 {
     0x10,                               /* Descriptor Size */
@@ -657,7 +657,7 @@ const uint8_t SSDscr[] =
     '2', 0x00
 };
 /*  HS Configuration string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBConfigHSDscr[16]  __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBConfigHSDscr[16]  __attribute__ ((aligned (32)));
  const uint8_t HSDscr[] =
 {
     0x10,                               /* Descriptor Size */
@@ -672,7 +672,7 @@ USB3_DESC_ATTRIBUTES uint8_t CyFxUSBConfigHSDscr[16]  __attribute__ ((aligned (3
 };
 
 /* FS Not Supported string descriptor */
-USB3_DESC_ATTRIBUTES uint8_t CyFxUSBFSDscr[64] __attribute__ ((aligned (32)));
+HBDMA_BUF_ATTRIBUTES uint8_t CyFxUSBFSDscr[64] __attribute__ ((aligned (32)));
 const uint8_t FullSpeedStringDescr[] =
 {
     0x22,        /* Descriptor Size */

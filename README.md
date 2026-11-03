@@ -6,7 +6,7 @@ This code example demonstrates the implementation of a USB3 Vision device stream
 
 [View this README on GitHub.](https://github.com/Infineon/mtb-example-fx20-usb3vision)
 
-[Provide feedback on this code example.](https://yourvoice.infineon.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDA4NjQiLCJTcGVjIE51bWJlciI6IjAwMi00MDg2NCIsIkRvYyBUaXRsZSI6IkVaLVVTQiZ0cmFkZTsgIEZYMjA6IFVTQjMgVmlzaW9uIChVM1YpIGFwcGxpY2F0aW9uIiwicmlkIjoic3VtaXQua3VtYXJAaW5maW5lb24uY29tIiwiRG9jIHZlcnNpb24iOiIxLjAuMyIsIkRvYyBMYW5ndWFnZSI6IkVuZ2xpc2giLCJEb2MgRGl2aXNpb24iOiJNQ0QiLCJEb2MgQlUiOiJXSVJFRCIsIkRvYyBGYW1pbHkiOiJTU19VU0IifQ==)
+[Provide feedback on this code example.](https://yourvoice.infineon.com/jfe/form/SV_1NTns53sK2yiljn?Q_EED=eyJVbmlxdWUgRG9jIElkIjoiQ0UyNDA4NjQiLCJTcGVjIE51bWJlciI6IjAwMi00MDg2NCIsIkRvYyBUaXRsZSI6IkVaLVVTQiZ0cmFkZTsgIEZYMjA6IFVTQjMgVmlzaW9uIChVM1YpIGFwcGxpY2F0aW9uIiwicmlkIjoic3VtaXQua3VtYXJAaW5maW5lb24uY29tIiwiRG9jIHZlcnNpb24iOiIxLjAuNCIsIkRvYyBMYW5ndWFnZSI6IkVuZ2xpc2giLCJEb2MgRGl2aXNpb24iOiJNQ0QiLCJEb2MgQlUiOiJXSVJFRCIsIkRvYyBGYW1pbHkiOiJTU19VU0IifQ==)
 
 
 ## Requirements
@@ -672,6 +672,7 @@ Document title: *CE240864* – *EZ-USB&trade;  FX20: USB3 Vision Application*
  1.0.0   | New code example
  1.0.1   | Updated application to make use of USBFXStack version 1.3.2 <br> Added support for firmware-based LVDS PHY training
  1.0.3   | Updated application to use USBFXStack version 1.3.3 <br> Added bitfiles with support for firmware based LVDS PHY training
+ 1.0.4   | Added support for IAR compiler
 
 <br>
 
